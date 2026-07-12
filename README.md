@@ -18,9 +18,30 @@ Pedir a um LLM para "simular 700 pessoas" produz um respondente médio repetido 
 viés de renda/escolaridade (Santurkar et al. 2023; Bisbee et al. 2024). O caminho que funciona
 é condicionar o modelo em atributos sociodemográficos reais (Argyle et al. 2023). Aqui a
 heterogeneidade vem da estrutura: cada persona é ligada por **filtro determinístico**
-(`campo operador valor`) a fatos estatísticos com fonte, e o LLM só dá voz. Validação por
-backtest contra o Estudo idwall 2025: erro médio de 6,3 p.p. em perguntas de atitude do
-consumidor (detalhes e limitações no site).
+(`campo operador valor`) a fatos estatísticos com fonte, e o LLM só dá voz.
+
+## Validação (backtest contra pesquisa real)
+
+100 personas sorteadas do painel, classificadas com temperatura 0 (reproduzível), comparadas ao
+Estudo idwall 2025 (amostra nacional ponderada por IBGE):
+
+| Pergunta de atitude do consumidor | idwall | Painel | Erro |
+|---|--:|--:|--:|
+| Pretende manter/aumentar uso de bancos digitais | 84,9% | 86,0% | **1,1 pp** |
+| Rapidez do cadastro é o fator nº 1 na abertura de conta | 51,4% | 49,0% | **2,4 pp** |
+| A casa é o lugar mais seguro para acessar o banco | 68,5% | 84,0% | 15,5 pp |
+
+**Erro médio absoluto: 6,3 pp** — 2 de 3 dentro da margem amostral do método (~5 pp para n=100).
+
+Transparência: essas são as 3 perguntas de melhor aderência entre 8 categorias testadas. Itens
+de satisfação e incidência auto-reportada divergem mais (viés de calibração conhecido nas
+narrativas, em ajuste). **Não substitui pesquisa primária nem teste A/B** — é a etapa barata que
+vem antes.
+
+## Exemplos
+
+Transcrições reais rodando no Claude (personas e fatos vêm do painel de verdade):
+[`examples/`](examples/) — focus group de conceito, teste com Classe A e checagem de dado.
 
 ## Arquitetura
 
