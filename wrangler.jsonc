@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "painel",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "MCP_OBJECT", "class_name": "PainelMCP" },
+      { "name": "QUOTA", "class_name": "QuotaDO" },
+      { "name": "FORUM", "class_name": "ForumDO" },
+      { "name": "STATS", "class_name": "StatsDO" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["PainelMCP"] },
+    { "tag": "v2", "new_sqlite_classes": ["QuotaDO"] },
+    { "tag": "v3", "new_sqlite_classes": ["ForumDO"] },
+    { "tag": "v4", "new_sqlite_classes": ["StatsDO"] }
+  ],
+  "observability": { "enabled": true }
+}

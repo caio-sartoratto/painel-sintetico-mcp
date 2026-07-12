@@ -1,0 +1,12 @@
+# segredos e notas operacionais — nunca versionar
+.dev.vars
+.admin-token.txt
+ADMIN.md
+.claude/
+
+# dependências e artefatos
+node_modules/
+.wrangler/
+
+# dados compilados do vault (o vault é o ativo do produto; regenerar com npm run build-data)
+src/data/
