@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.caio-sartoratto/painel-sintetico-concorde",
+  "title": "Painel Sintético Concorde",
+  "description": "787 personas sintéticas do consumidor bancário brasileiro para discovery de produtos.",
+  "repository": {
+    "url": "https://github.com/caio-sartoratto/painel-sintetico-mcp",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "remotes": [
+    { "type": "streamable-http", "url": "https://painel.concorde-painel.workers.dev/mcp" }
+  ]
+}
