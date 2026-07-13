@@ -144,6 +144,69 @@ function ok(data: unknown) {
   return { content: [{ type: "text" as const, text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] };
 }
 
+// ---------- Fronteira de confiança (triagem de discovery) ----------
+// O painel é forte onde a resposta se infere do contexto de segmento (prioridade, objeção,
+// atrito de onboarding, compreensão de conceito, linguagem, tradeoff) e fraco onde exige
+// estado vivido (satisfação, incidência, dano, comportamento passado real, intensidade
+// emocional, confiança após experiência). Esta triagem é heurística e determinística: sinaliza
+// perguntas prováveis de estado-vivido para o operador não confundir inferência com experiência.
+const FRAMEWORK_CONFIANCA = {
+  inferivel: {
+    rotulo: "Seguro para pressão direcional de conceito.",
+    exemplos: ["prioridades prováveis", "objeções prováveis", "atrito de onboarding", "compreensão de conceito", "linguagem que pode ou não colar", "tradeoffs a testar com humanos"],
+  },
+  arriscado: {
+    rotulo: "Use com cautela e marque para validação humana.",
+    exemplos: ["frequência/hábito auto-reportado", "valores gastos declarados", "incidência leve"],
+  },
+  humano: {
+    rotulo: "Não pergunte a uma persona sintética. Exige estado vivido, valide com gente real.",
+    exemplos: ["satisfação", "incidência (já foi vítima/aconteceu)", "trauma ou dano", "comportamento passado real", "intensidade emocional", "confiança após uma experiência real"],
+  },
+};
+
+const FLAGS_HUMANO: Array<[RegExp, string]> = [
+  [/satisfa|satisfeit|quão feliz|felicidade|gost(ou|aram|a) d|contente|nps\b|csat/i, "satisfação / sentimento vivido"],
+  [/vítim|golpe|fraud|trauma|sofreu|prejuíz|perde(u|ram) (dinheiro|grana|tudo)|humilha|vergonh/i, "dano ou experiência sensível"],
+  [/j[áa] (foi|aconteceu|passou|caiu|sofreu|teve|deixou)|quantas vezes|no [úu]ltimo (m[êe]s|ano|dia)|hist[óo]rico de|o que voc[êe] fez quando|voc[êe] chegou a|alguma vez voc[êe]/i, "incidência ou comportamento passado real"],
+  [/confia (mais|menos|depois)|o quanto voc[êe] confia|qu[ãa]o (irritad|brav|com raiva|com medo|frustrad)|intensidade emocional/i, "confiança ou emoção após experiência real"],
+  [/como (voc[êe] )?se sentiu|o que voc[êe] sentiu|como foi (passar|viver|quando)|o que passou pela sua cabe[çc]a quando/i, "emoção recordada de um evento vivido"],
+];
+const FLAGS_ARRISCADO: Array<[RegExp, string]> = [
+  [/com que frequ[êe]ncia|quantas vezes por|quanto tempo por dia|costuma usar quant|hábito de/i, "frequência/hábito auto-reportado"],
+  [/quanto voc[êe] (gasta|paga|investe|guarda)|qual seu (gasto|or[çc]amento|sal[áa]rio)/i, "valor auto-reportado"],
+];
+
+function avaliarPergunta(pergunta: string) {
+  const q = pergunta ?? "";
+  const humano = FLAGS_HUMANO.filter(([re]) => re.test(q)).map(([, d]) => d);
+  if (humano.length)
+    return {
+      pergunta,
+      banda: "humano",
+      confie: false,
+      sinais_detectados: [...new Set(humano)],
+      recomendacao: FRAMEWORK_CONFIANCA.humano.rotulo,
+    };
+  const arriscado = FLAGS_ARRISCADO.filter(([re]) => re.test(q)).map(([, d]) => d);
+  if (arriscado.length)
+    return {
+      pergunta,
+      banda: "arriscado",
+      confie: "parcial",
+      sinais_detectados: [...new Set(arriscado)],
+      recomendacao: FRAMEWORK_CONFIANCA.arriscado.rotulo,
+    };
+  return {
+    pergunta,
+    banda: "inferivel",
+    confie: true,
+    sinais_detectados: [],
+    recomendacao: FRAMEWORK_CONFIANCA.inferivel.rotulo,
+    nota: "Nenhum sinal de estado-vivido detectado. Ainda assim, se a pergunta depende de experiência real (ex.: objeção que nasce de um dano vivido), trate como caso de borda e valide com humanos.",
+  };
+}
+
 // ---------- Servidor MCP ----------
 export class PainelMCP extends McpAgent {
   server = new McpServer({ name: "painel-sintetico-concorde", version: "1.0.0" });
@@ -181,6 +244,8 @@ export class PainelMCP extends McpAgent {
             composicao: "P(público | métrica) — o INVERSO da propensão, não leia como propensão",
             referencia: "valor comparativo, não é proporção de pessoas",
           },
+          fronteira_de_confianca:
+            "Este painel é uma triagem de discovery pré-campo, não um substituto de pesquisa. Antes de confiar numa resposta, classifique a PERGUNTA (use a ferramenta avaliar_pergunta): 'inferivel' = seguro para pressão direcional de conceito (prioridade, objeção, atrito de onboarding, compreensão, linguagem, tradeoff); 'humano' = exige estado vivido e NÃO deve ser perguntado a persona sintética (satisfação, incidência/vitimização, dano, comportamento passado real, intensidade emocional, confiança após experiência). Não confunda preferência inferida com realidade vivida. O valor do painel é saber o que perguntar a gente de verdade antes de gastar com campo.",
           termos_de_uso:
             "Serviço gratuito de consulta (prova de conceito, projeto Concorde). Os dados do painel são propriedade do autor; uso para consultas e simulações é livre, extração em massa ou redistribuição da base não é autorizada. Há cotas por IP (rajada e diária).",
           contagens: { personas: personas.length, fatos: fatos.length, vozes: vozes.length, instituicoes: instituicoes.length },
@@ -188,6 +253,13 @@ export class PainelMCP extends McpAgent {
           campos_numericos: ["idade", "renda_mensal_individual", "renda_mensal_familiar", "patrimonio_financeiro", "patrimonio_bens", "valor_divida_ativa"],
         });
       }
+    );
+
+    this.server.tool(
+      "avaliar_pergunta",
+      "Fronteira de confiança: classifica uma pergunta de pesquisa em 'inferivel' (seguro para persona sintética — direcional), 'arriscado' (validar) ou 'humano' (exige estado vivido, NÃO pergunte a persona sintética). Use antes de rodar um focus group para separar o que o painel pode responder do que precisa de gente real. Triagem heurística determinística; casos de borda devem ir para validação humana.",
+      { pergunta: z.string().describe("A pergunta de pesquisa a classificar. Ex.: 'quão satisfeito você está com seu banco?'") },
+      async ({ pergunta }) => ok(avaliarPergunta(pergunta)),
     );
 
     this.server.tool(

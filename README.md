@@ -67,9 +67,9 @@ vault Obsidian (fonte da verdade: personas + fatos + vozes + instituições)
         ▼
 Cloudflare Worker
  ├─ /mcp        servidor MCP (agents SDK / McpAgent + Durable Object)
- │              8 ferramentas: visao_geral, filtrar_personas, sortear_amostra,
- │              get_personas, buscar_fatos, listar_vozes, get_instituicao,
- │              get_distribuicoes
+ │              9 ferramentas: visao_geral, avaliar_pergunta (fronteira de
+ │              confiança), filtrar_personas, sortear_amostra, get_personas,
+ │              buscar_fatos, listar_vozes, get_instituicao, get_distribuicoes
  ├─ QuotaDO     cotas por IP (rajada/dia + teto de fichas: anti-extração)
  ├─ /           site estático server-rendered (zero framework)
  ├─ /forum      fórum anônimo sem moderação prévia (ForumDO) — nunca exposto via MCP

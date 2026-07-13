@@ -429,16 +429,28 @@ responde perguntas de pesquisa em primeira pessoa dentro do Claude — com erro 
 </div>
 
 <h2>para que serve</h2>
-<p><b>Discovery de produto.</b> A fase cara de errar: validar se um conceito faz sentido, para
-quem, com que objeções — antes de desenhar a solução. O painel deixa você rodar um focus group
-sintético em minutos: sorteia um recorte da população, apresenta a ideia, e cada persona reage
-ancorada nos dados do próprio segmento.</p>
+<p><b>Triagem de discovery pré-campo.</b> A fase cara de errar: validar se um conceito faz sentido,
+para quem, com que objeções — antes de desenhar a solução e antes de gastar com pesquisa de campo.
+O painel deixa você rodar um focus group sintético em minutos: sorteia um recorte da população,
+apresenta a ideia, e cada persona reage ancorada nos dados do próprio segmento.</p>
 <div class="destaque">
 <p><b>O que ele não é:</b> o painel <b>não substitui pesquisa primária com pessoas reais nem
-teste A/B em produção</b>. Ele é a etapa barata que vem antes — o rascunho que filtra hipóteses
-fracas e afia as perguntas que você levará para a pesquisa de verdade.</p>
+teste A/B em produção</b>. Ele é a etapa barata que vem antes. A promessa não é "pesquisa
+instantânea", é <b>saber o que perguntar a gente de verdade antes de gastar dinheiro perguntando</b>.</p>
 </div>
-<p class="link-bloco"><a href="/usar">→ padrões de uso para discovery</a></p>
+
+<h2>a fronteira de confiança</h2>
+<p>Um resultado sintético que sai rápido não é prova de nada. O que faz do painel uma ferramenta
+honesta é ele saber onde confiar e onde não. A régua é o tipo de pergunta:</p>
+<div class="grade">
+  <div class="card"><b style="color:var(--verde)">Inferível ✓</b><span>a resposta se infere do contexto de segmento: prioridades, objeções prováveis, atrito de onboarding, compreensão de conceito, linguagem que cola ou não, tradeoffs. <b>Seguro para pressão direcional.</b></span></div>
+  <div class="card"><b style="color:var(--vermelho)">Só-humano ✗</b><span>a resposta exige estado vivido: satisfação, incidência (já foi vítima?), dano, comportamento passado real, intensidade emocional, confiança depois de uma experiência. <b>Não pergunte a uma persona sintética.</b></span></div>
+</div>
+<p>Por isso o painel tem uma ferramenta de <b>triagem</b>: antes de rodar o focus group, ela
+classifica cada pergunta em inferível, arriscado ou só-humano, e transforma seus pontos cegos no
+roteiro da pesquisa que você vai levar para pessoas reais. É o que o backtest abaixo mostra na
+prática: o painel acerta em atitude e intenção, e erra onde a resposta pedia experiência vivida.</p>
+<p class="link-bloco"><a href="/usar">→ como usar a triagem e rodar um focus group</a></p>
 
 <h2>validado contra pesquisa real</h2>
 <p>Backtest contra o Estudo idwall de Experiência Digital 2025 (amostra nacional ponderada por
@@ -583,6 +595,18 @@ ${term(
 <p class="dim">Se o Claude responder com as contagens do painel (787 personas, 105 fatos…),
 está tudo funcionando.</p></div></div>
 
+<h2>registro oficial de MCP</h2>
+<p>O painel está publicado no <a href="https://registry.modelcontextprotocol.io/v0.1/servers?search=painel-sintetico-concorde" rel="noopener">registro oficial de MCP</a>
+(mantido por Anthropic, GitHub, Microsoft e PulseMCP), com o nome:</p>
+${term(
+  "registro oficial",
+  `<span class="c"># nome no registro</span>
+<span class="r">io.github.caio-sartoratto/painel-sintetico-concorde</span>`
+)}
+<p class="dim">Isso faz o conector aparecer em marketplaces e agregadores de MCP que consomem
+o registro. A instalação, porém, continua sendo pela URL acima: estar no registro não adiciona
+o conector automaticamente ao Claude.</p>
+
 <h2>limites do serviço gratuito</h2>
 <ul class="dim">
 <li>120 consultas por minuto e 1.000 por dia, por IP</li>
@@ -638,6 +662,24 @@ ${promptCopiavel("claude — primeiro focus group", PROMPT_PRIMEIRA_VEZ)}
 real com fonte, e uma síntese com as objeções que você levaria meses para ouvir em campo.
 O seed 7 torna a amostra reprodutível: rode de novo amanhã e compare.</p>
 
+<h2>a triagem: o que perguntar antes de gastar</h2>
+<p>Antes de rodar o focus group, passe suas perguntas pela fronteira de confiança. A ferramenta
+separa o que a persona sintética pode responder (direcional) do que exige gente de verdade
+(estado vivido), e o que sobra vira o roteiro da sua pesquisa de campo.</p>
+${promptCopiavel(
+  "claude — conversa",
+  `Antes de eu rodar um focus group, avalie estas perguntas pela fronteira
+de confiança do painel e me diga quais confiar e quais levar para
+pesquisa com humanos:
+1. O que mais pesa na escolha de um banco digital?
+2. Quão satisfeito você está com seu banco hoje?
+3. Você já foi vítima de golpe no Pix?
+4. Qual destas duas mensagens de campanha faz mais sentido?`
+)}
+<p class="dim">Resultado esperado: 1 e 4 saem como "inferível" (pode perguntar às personas), 2 e
+3 saem como "só-humano" (leve para pesquisa real). Aí você roda o focus group só com o que é
+seguro, e já sai com o roteiro do que validar em campo.</p>
+
 <h2>depois, os padrões do dia a dia</h2>
 
 <h3>recorte + entrevista</h3>
@@ -685,6 +727,7 @@ que as personas do meu recorte diriam. Marque o que é voz real e o que
 <h2>ferramentas disponíveis (para os curiosos)</h2>
 <div class="grade">
 <div class="card"><b>visao_geral</b><span>o que existe, campos filtráveis, tipos de percentual</span></div>
+<div class="card"><b>avaliar_pergunta</b><span>fronteira de confiança: inferível, arriscado ou só-humano</span></div>
 <div class="card"><b>filtrar_personas</b><span>recorte exato por qualquer atributo</span></div>
 <div class="card"><b>sortear_amostra</b><span>amostra aleatória reprodutível (seed)</span></div>
 <div class="card"><b>get_personas</b><span>fichas completas: atributos + grounding + história</span></div>
@@ -967,8 +1010,13 @@ brasileiro (4 classes sociais x 6 faixas etárias, ~27 atributos por persona), c
 dados públicos do IBGE, Bacen e ABEP. Cada persona é ligada por filtro determinístico a 105
 fatos estatísticos com fonte, 17 vozes verbatim reais e fichas de 12 instituições financeiras.
 Validação: erro médio de 6,3 pontos percentuais contra o Estudo idwall 2025 em perguntas de
-atitude do consumidor. Uso: discovery de produtos bank/fintech (focus groups sintéticos,
-teste de conceito e de mensagem). Não substitui pesquisa primária nem teste A/B.
+atitude do consumidor. Uso: triagem de discovery pré-campo para produtos bank/fintech (focus
+groups sintéticos, teste de conceito e de mensagem). Tem uma fronteira de confiança explícita
+(ferramenta avaliar_pergunta): é confiável para perguntas inferíveis do contexto de segmento
+(prioridades, objeções, atrito de onboarding, compreensão, linguagem, tradeoffs) e sinaliza como
+"só-humano" as que exigem estado vivido (satisfação, incidência/vitimização, dano, comportamento
+passado real, intensidade emocional). Não substitui pesquisa primária nem teste A/B: o valor é
+saber o que perguntar a gente de verdade antes de gastar com campo.
 
 Serviço gratuito (prova de conceito) com cotas por IP. Conector MCP remoto para Claude:
 ${MCP_URL} — requer plano pago do Claude.
