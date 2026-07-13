@@ -1,12 +1,28 @@
 # Painel Sintético Concorde
 
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-published-6f42c1)](https://registry.modelcontextprotocol.io/v0.1/servers?search=painel-sintetico-concorde)
+[![License: MIT](https://img.shields.io/badge/License-MIT-informational)](LICENSE)
+[![Cloudflare Workers](https://img.shields.io/badge/runs%20on-Cloudflare%20Workers-f38020)](https://workers.cloudflare.com/)
+
 Servidor MCP remoto que expõe um painel de **787 personas sintéticas do consumidor bancário
 brasileiro** para qualquer Claude (Desktop, web, mobile) — para discovery de produtos bank e
 fintech. Roda inteiro no free tier da Cloudflare Workers.
 
 **Site e demo:** https://painel.concorde-painel.workers.dev
-**Conector (Claude → Settings → Connectors → Add custom connector):**
-`https://painel.concorde-painel.workers.dev/mcp`
+**Nome no registro oficial de MCP:** `io.github.caio-sartoratto/painel-sintetico-concorde`
+
+## Como instalar / encontrar
+
+O painel é um conector MCP remoto. Não há nada para baixar.
+
+1. No Claude (Desktop, web ou mobile): **Settings → Connectors → Add custom connector**
+2. Cole a URL: `https://painel.concorde-painel.workers.dev/mcp`
+3. Requer plano pago do Claude (conectores customizados não estão no plano gratuito)
+
+Ele também está publicado no [registro oficial de MCP](https://registry.modelcontextprotocol.io)
+como `io.github.caio-sartoratto/painel-sintetico-concorde`, então tende a aparecer em
+marketplaces e agregadores de MCP que consomem o registro. A instalação, porém, continua sendo
+pela URL acima (estar no registro não adiciona o conector automaticamente ao Claude).
 
 > Os **dados do painel não estão neste repositório** (são proprietários — veja a licença).
 > Este repo é o motor: servidor MCP, site, fórum, cotas e telemetria. O serviço público
