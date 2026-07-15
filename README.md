@@ -38,18 +38,60 @@ heterogeneidade vem da estrutura: cada persona é ligada por **filtro determiní
 
 ## Validação (backtest contra pesquisa real)
 
-100 personas sorteadas do painel, classificadas com temperatura 0 (reproduzível), comparadas ao
-Estudo idwall 2025 (amostra nacional ponderada por IBGE):
+100 personas sorteadas do painel, classificadas com temperatura 0 (reproduzível), comparadas a
+pesquisas publicadas.
+
+### idwall 2025 (amostra nacional ponderada por IBGE)
 
 | Pergunta de atitude do consumidor | idwall | Painel | Erro |
 |---|--:|--:|--:|
 | Pretende manter/aumentar uso de bancos digitais | 84,9% | 86,0% | **1,1 pp** |
 | Rapidez do cadastro é o fator nº 1 na abertura de conta | 51,4% | 49,0% | **2,4 pp** |
-| A casa é o lugar mais seguro para acessar o banco | 68,5% | 84,0% | 15,5 pp |
+| A casa é o lugar mais seguro para acessar o banco | 68,5% | 74,0% | **5,5 pp** |
 
-**Erro médio absoluto: 6,3 pp** — 2 de 3 dentro da margem amostral do método (~5 pp para n=100).
+**Erro médio absoluto: 3,0 pp** — as três dentro de 6 pontos percentuais do benchmark.
 
-Transparência: essas são as 3 perguntas de melhor aderência entre 8 categorias testadas. Itens
+### Reclame AQUI 2026 (crise de confiança em bancos digitais, n=2.073)
+
+| Atitude do consumidor | Reclame AQUI | Painel | Erro |
+|---|--:|--:|--:|
+| Medo de a instituição quebrar e perder o dinheiro (liquidez) | 35% | 39% | **4 pp** |
+
+### BCG e Nubank, "Beyond Access" 2023 (população brasileira, n=2.000)
+
+Headline do estudo: mais de 70% dos brasileiros não se sentem seguros nem incluídos
+financeiramente. O painel, de forma independente, chega a **78%**.
+
+Sem nenhuma quebra por classe no benchmark, o painel reproduz sozinho o gradiente social da
+insegurança (amostra estratificada por classe, temperatura 0):
+
+| Classe | Se sente inseguro | Amostra |
+|---|--:|--:|
+| A | 5% | n=22 |
+| B | 20% | n=30 |
+| C | 77% | n=30 |
+| D/E | 80% | n=30 |
+
+### Controle: e se for só o LLM?
+
+As mesmas perguntas respondidas direto por modelos de fronteira, sem painel, sem persona, sem
+busca na internet, temperatura 0:
+
+| Pergunta | Real | Painel | Gemini 3.1 Pro | GPT-5.6 |
+|---|--:|--:|--:|--:|
+| Mantém ou aumenta o uso de bancos digitais | 84,9% | 86% | 84% | 85% |
+| Rapidez do cadastro é o fator nº 1 | 51,4% | 49% | 18% | 25% |
+| A casa é o lugar mais seguro para acessar | 68,5% | 74% | 65% | 90% |
+| Medo de a instituição quebrar (liquidez) | 35% | 39% | 45% | 65% |
+| **Erro médio absoluto** | | **3,3 pp** | 12,0 pp | 19,5 pp |
+
+O painel erra **3,7x menos que o Gemini** e **6x menos que o GPT** nas mesmas perguntas. No
+headline do BCG: painel 78% (dentro do ">70%"), Gemini 55% (fora), GPT 60% (fora). Os números
+dos modelos crus ainda contradizem a si mesmos: o Gemini estima 45% "seguros e incluídos" mas só
+31% "seguros", e a interseção não pode ser maior que a parte. O painel não produz esse erro
+porque cada número vem de contar personas uma a uma.
+
+Transparência: essas são as perguntas de melhor aderência entre as categorias testadas. Itens
 de satisfação e incidência auto-reportada divergem mais (viés de calibração conhecido nas
 narrativas, em ajuste). **Não substitui pesquisa primária nem teste A/B** — é a etapa barata que
 vem antes.

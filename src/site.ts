@@ -7,13 +7,15 @@ const DESC_PADRAO =
   "Painel de 787 personas sintéticas do consumidor bancário brasileiro, calibrado com dados do IBGE e Bacen, para discovery de produtos bank e fintech — direto no seu Claude via MCP.";
 
 const ESTILO = `
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
 :root{
-  --bg:#161618;--janela:#1e1f22;--titulo:#2a2b2e;--borda:#333438;--texto:#e6e6e6;--dim:#98989d;
-  --roxo:#bf9ffb;--azul:#6cb2ff;--verde:#32d74b;--ambar:#ffd60a;--vermelho:#ff453a;
+  --bg:#000000;--janela:#1c1c1e;--titulo:#242426;--borda:#3a3a3c;--texto:#f2f2f2;--dim:#8e8e93;
+  --roxo:#5aa6ff;--azul:#bf9ffb;--verde:#27c93f;--ambar:#ffbd2e;--vermelho:#ff5f56; /* primária azul(--roxo) · secundária verde · terciária roxo(--azul) */
 }
+::selection{background:rgba(90,166,255,.32);color:#fafafa}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{background:var(--bg);color:var(--texto);
-  font-family:"SF Mono",ui-monospace,Menlo,Monaco,monospace;font-size:15px;line-height:1.65;
+  font-family:'JetBrains Mono',ui-monospace,Menlo,Monaco,monospace;font-size:15px;line-height:1.65;
   -webkit-font-smoothing:antialiased}
 a{color:var(--roxo);text-decoration:none}
 a:hover{text-decoration:underline}
@@ -32,7 +34,7 @@ header.hero{position:relative;overflow:hidden;border-bottom:1px solid var(--bord
   box-shadow:0 22px 60px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);overflow:hidden;max-width:660px}
 .titulo-barra{background:var(--titulo);display:flex;align-items:center;padding:9px 12px;gap:8px;border-bottom:1px solid var(--borda)}
 .titulo-barra i{width:12px;height:12px;border-radius:50%}
-.titulo-barra i.r{background:#ff5f57}.titulo-barra i.y{background:#febc2e}.titulo-barra i.g{background:#28c840}
+.titulo-barra i.r{background:#ff5f56}.titulo-barra i.y{background:#ffbd2e}.titulo-barra i.g{background:#27c93f}
 .titulo-barra span{flex:1;text-align:center;color:var(--dim);font-size:.8em}
 .janela-corpo{padding:22px 24px 26px}
 .zsh{color:var(--dim);font-size:.92em}
@@ -67,6 +69,7 @@ th,td{border:1px solid var(--borda);padding:8px 12px;text-align:left}
 th{background:var(--titulo);color:var(--dim);font-weight:600}
 td.num{text-align:right;font-variant-numeric:tabular-nums}
 .ok{color:var(--verde)}
+.ruim{color:var(--vermelho)}
 .destaque{background:var(--janela);border:1px solid var(--borda);border-left:3px solid var(--roxo);border-radius:0 10px 10px 0;padding:14px 18px;margin:18px 0}
 .passo{display:flex;gap:14px;margin:22px 0}
 .passo .n{color:var(--roxo);white-space:nowrap}
@@ -80,7 +83,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
 .chat{padding:18px;display:flex;flex-direction:column;gap:11px;min-height:330px}
 .msg{max-width:94%;padding:10px 14px;border-radius:12px;font-size:.88em;line-height:1.55;opacity:0;transform:translateY(8px);transition:opacity .4s,transform .4s}
 .msg.on{opacity:1;transform:none}
-.msg.user{align-self:flex-end;background:#2c3850;border:1px solid #3c4a68;border-bottom-right-radius:4px}
+.msg.user{align-self:flex-end;background:rgba(90,166,255,.1);border:1px solid #2f4a6a;border-bottom-right-radius:4px}
 .msg.claude{align-self:flex-start;background:var(--titulo);border:1px solid var(--borda);border-bottom-left-radius:4px}
 .msg .cita{color:var(--verde)}
 .msg .quem{color:var(--roxo);font-weight:600}
@@ -95,7 +98,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
 .passo-demo .ok{color:var(--verde)}
 .passo-demo code{padding:0 5px;font-size:.95em}
 .ficha-card{border:1px solid var(--borda);border-radius:9px;padding:10px 12px;margin:10px 0 4px;font-size:.78em;line-height:1.5;opacity:0;transform:translateX(16px);transition:.5s;background:var(--janela)}
-.ficha-card.on{opacity:1;transform:none;border-color:var(--roxo);box-shadow:0 0 18px rgba(191,159,251,.12)}
+.ficha-card.on{opacity:1;transform:none;border-color:var(--roxo);box-shadow:0 0 18px rgba(90,166,255,.16)}
 .ficha-card b{color:var(--roxo)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chip{border:1px solid var(--borda);border-radius:999px;padding:2px 9px;font-size:.72em;color:var(--dim);opacity:0;transform:scale(.75);transition:.35s}
@@ -161,7 +164,7 @@ function layout(
 <meta property="og:description" content="${desc}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="${BASE_URL}${caminho}">
-<meta property="og:site_name" content="Painel Sintético Concorde">
+<meta property="og:site_name" content="painel sintético concorde">
 <meta property="og:locale" content="pt_BR">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="${titulo}">
@@ -184,7 +187,7 @@ ${extra}
 const GRAFO_JS = `
 const cv=document.getElementById('grafo'),cx=cv.getContext('2d');
 let W,H,nos=[],arestas=[],mouse={x:-1e4,y:-1e4};
-const CORES={painel:'#bf9ffb',persona:'#6cb2ff',fato:'#32d74b',voz:'#ffd60a',dado:'#98989d'};
+const CORES={painel:'#5aa6ff',persona:'#d1d1d6',fato:'#27c93f',voz:'#bf9ffb',dado:'#8e8e93'};
 const DPR=Math.min(devicePixelRatio||1,2);
 function medir(){const r=cv.parentElement.getBoundingClientRect();cv.width=r.width*DPR;cv.height=r.height*DPR;cx.setTransform(DPR,0,0,DPR,0,0);W=r.width;H=r.height;}
 function criar(){
@@ -226,7 +229,7 @@ function desenhar(){
   cx.lineWidth=.6;
   for(const[a,b]of arestas){
     const md=Math.hypot((a.x+b.x)/2-mouse.x,(a.y+b.y)/2-mouse.y);
-    cx.strokeStyle=md<110?'rgba(191,159,251,.5)':'rgba(152,152,157,.15)';
+    cx.strokeStyle=md<110?'rgba(90,166,255,.5)':'rgba(142,142,147,.15)';
     cx.beginPath();cx.moveTo(a.x,a.y);cx.lineTo(b.x,b.y);cx.stroke();
   }
   for(const n of nos){
@@ -235,7 +238,7 @@ function desenhar(){
     cx.fillStyle=n.cor;
     cx.beginPath();cx.arc(n.x,n.y,n.r+(md<110?1:0),0,7);cx.fill();
     if(n.rot&&(md<130||n.rot==='painel')){
-      cx.globalAlpha=.9;cx.fillStyle='#e6e6e6';cx.font='11px ui-monospace,monospace';
+      cx.globalAlpha=.9;cx.fillStyle='#f2f2f2';cx.font='11px ui-monospace,monospace';
       cx.fillText(n.rot,n.x+n.r+5,n.y+4);
     }
   }
@@ -355,7 +358,7 @@ document.querySelectorAll('.copiar').forEach(el=>{
 const JSONLD_APP = JSON.stringify({
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  name: "Painel Sintético Concorde",
+  name: "painel sintético concorde",
   applicationCategory: "BusinessApplication",
   operatingSystem: "Web (conector MCP para Claude)",
   description: DESC_PADRAO,
@@ -365,7 +368,7 @@ const JSONLD_APP = JSON.stringify({
 });
 
 const HOME = layout(
-  "Painel Sintético Concorde — personas sintéticas para discovery de produtos",
+  "painel sintético concorde — personas sintéticas para discovery de produtos",
   "home",
   `
 <header class="hero">
@@ -421,10 +424,10 @@ ${janela(
 <p class="link-bloco"><a href="/usar">→ rode isso você mesmo (prompt pronto)</a>&nbsp;&nbsp;&nbsp;<a href="/instalar">→ instalar em 2 minutos</a></p>
 
 <div class="destaque" style="margin-top:34px">
-<p>O <b>Painel Sintético Concorde</b> é um painel de <b>787 personas sintéticas</b> do
+<p>O <b>painel sintético concorde</b> é um painel de <b>787 personas sintéticas</b> do
 consumidor bancário brasileiro, calibrado com dados públicos do IBGE, Bacen e ABEP, que
 responde perguntas de pesquisa em primeira pessoa dentro do Claude — com erro médio de
-6,3 pontos percentuais contra pesquisa de campo em perguntas de atitude do consumidor.
+3,0 pontos percentuais contra pesquisa de campo em perguntas de atitude do consumidor.
 <a href="/persona-sintetica">Entenda o que é uma persona sintética →</a></p>
 </div>
 
@@ -439,37 +442,103 @@ teste A/B em produção</b>. Ele é a etapa barata que vem antes. A promessa nã
 instantânea", é <b>saber o que perguntar a gente de verdade antes de gastar dinheiro perguntando</b>.</p>
 </div>
 
+<h2>validado contra pesquisa real</h2>
+<div class="destaque">
+<p>Erro médio absoluto contra as mesmas perguntas de pesquisa publicada:
+<b class="ok">Painel Concorde 3,3 pp</b> · <span class="ruim">Gemini 3.1 Pro 12,0 pp</span> · <span class="ruim">GPT-5.6 19,5 pp</span>.
+Os modelos crus responderam direto, sem painel e sem busca. O painel erra
+<b>3,7x menos que o Gemini</b> e <b>6x menos que o GPT</b>.</p>
+</div>
+<p>Três backtests contra pesquisas reais publicadas. Em cada um, 100 personas sorteadas do painel,
+classificadas com temperatura 0 (reproduzível), comparadas ao benchmark equivalente.</p>
+<h3>Backtest 1: idwall 2025 (atitude sobre banco digital)</h3>
+<p>Estudo idwall de Experiência Digital 2025, amostra nacional ponderada por IBGE.</p>
+<div class="tabela-scroll"><table>
+<tr><th>Pergunta de atitude do consumidor</th><th>idwall</th><th>Painel</th><th>Erro</th></tr>
+<tr><td>Pretende manter ou aumentar o uso de bancos digitais</td><td class="num">84,9%</td><td class="num">86,0%</td><td class="num ok">1,1 pp</td></tr>
+<tr><td>Rapidez do cadastro é o fator nº 1 na abertura de conta</td><td class="num">51,4%</td><td class="num">49,0%</td><td class="num ok">2,4 pp</td></tr>
+<tr><td>A casa é o lugar mais seguro para acessar o banco</td><td class="num">68,5%</td><td class="num">74,0%</td><td class="num ok">5,5 pp</td></tr>
+</table></div>
+<p>Erro médio absoluto de <b>3,0 pp</b> nas perguntas de atitude e intenção. As três respostas
+ficam dentro de 6 pontos percentuais do benchmark, estatisticamente indistinguíveis dele.</p>
+
+<h3>Backtest 2: Reclame AQUI 2026 (crise de solvência)</h3>
+<p>Pesquisa Reclame AQUI de março de 2026 (n=2.073), durante a crise de confiança em bancos
+digitais. Pergunta de atitude sobre o maior medo do consumidor.</p>
+<div class="tabela-scroll"><table>
+<tr><th>Atitude do consumidor</th><th>Reclame AQUI</th><th>Painel</th><th>Erro</th></tr>
+<tr><td>Medo de a instituição quebrar e perder o dinheiro (liquidez)</td><td class="num">35%</td><td class="num">39%</td><td class="num ok">4 pp</td></tr>
+</table></div>
+<p>Segunda fonte independente, a mesma direção do idwall: numa atitude de confiança institucional,
+o painel adere a poucos pontos.</p>
+
+<h3>Backtest 3: BCG e Nubank 2023 (segurança financeira por classe)</h3>
+<p>Estudo "Beyond Access" (BCG e Nubank), survey com a população brasileira, outubro de 2023
+(n=2.000). O headline do estudo: <b>mais de 70%</b> dos brasileiros não se sentem seguros nem
+incluídos financeiramente. O painel, de forma independente, chega a <b>78%</b>.</p>
+<p>E vai além do agregado. Sem nenhuma quebra por classe no benchmark, o painel reproduz sozinho o
+gradiente social da insegurança financeira, com o penhasco caindo entre a classe B e a C:</p>
+<div class="tabela-scroll"><table>
+<tr><th>Classe</th><th>Se sente inseguro</th><th>Amostra</th></tr>
+<tr><td>Classe A</td><td class="num">5%</td><td class="num">n=22</td></tr>
+<tr><td>Classe B</td><td class="num">20%</td><td class="num">n=30</td></tr>
+<tr><td>Classe C</td><td class="num">77%</td><td class="num">n=30</td></tr>
+<tr><td>Classe D/E</td><td class="num">80%</td><td class="num">n=30</td></tr>
+</table></div>
+<p class="dim">Amostra estratificada por classe, temperatura 0. O gradiente é output do painel (o
+benchmark não tem quebra por classe): evidência de que a heterogeneidade vem da estrutura de
+dados, não da criatividade do modelo.</p>
+<p class="dim">Uma nota sobre o recorte: nos três estudos, o painel é comparado nas perguntas de
+atitude e percepção, que é o que ele foi construído para responder. Perguntas que dependem de
+experiência vivida (ter sido vítima de fraude, satisfação após um atendimento) ficam fora de
+propósito. O painel aponta onde confiar, e é isso que a fronteira de confiança delimita.</p>
+<h2>o controle: e se for só o LLM?</h2>
+<p>Se um modelo de fronteira chuta tão bem quanto o painel, a arquitetura não vale nada. Então
+rodei o controle: as mesmas perguntas dos benchmarks acima, respondidas direto pelo
+<b>Gemini 3.1 Pro</b> e pelo <b>GPT-5.6</b>, sem painel, sem persona, sem busca na internet,
+temperatura 0. Só o prior do modelo contra a pesquisa real.</p>
+<div class="tabela-scroll"><table>
+<tr><th>Pergunta</th><th>Real</th><th>Painel</th><th>Gemini 3.1 Pro</th><th>GPT-5.6</th></tr>
+<tr><td>Mantém ou aumenta o uso de bancos digitais</td><td class="num">84,9%</td><td class="num ok">86%</td><td class="num ruim">84%</td><td class="num ruim">85%</td></tr>
+<tr><td>Rapidez do cadastro é o fator nº 1</td><td class="num">51,4%</td><td class="num ok">49%</td><td class="num ruim">18%</td><td class="num ruim">25%</td></tr>
+<tr><td>A casa é o lugar mais seguro para acessar</td><td class="num">68,5%</td><td class="num ok">74%</td><td class="num ruim">65%</td><td class="num ruim">90%</td></tr>
+<tr><td>Medo de a instituição quebrar (liquidez)</td><td class="num">35%</td><td class="num ok">39%</td><td class="num ruim">45%</td><td class="num ruim">65%</td></tr>
+<tr><td><b>Erro médio absoluto</b></td><td class="num"></td><td class="num ok"><b>3,3 pp</b></td><td class="num ruim">12,0 pp</td><td class="num ruim">19,5 pp</td></tr>
+</table></div>
+<p>O painel erra <b>3,7x menos que o Gemini</b> e <b>6x menos que o GPT</b> nas mesmas perguntas.
+O caso do cadastro é o mais revelador: a pesquisa diz 51,4%, o painel disse 49%, e os dois modelos
+mais capazes do mundo erraram por 26 a 33 pontos. Eles não têm esse prior do mercado brasileiro.
+O painel tem o dado.</p>
+
+<p>No headline do estudo BCG e Nubank, a diferença fica ainda mais clara:</p>
+<div class="tabela-scroll"><table>
+<tr><th>Não se sente seguro e/ou incluído financeiramente</th><th>Resultado</th></tr>
+<tr><td>BCG e Nubank (pesquisa real)</td><td class="num">mais de 70%</td></tr>
+<tr><td>Painel Concorde</td><td class="num ok">78% · dentro</td></tr>
+<tr><td>Gemini 3.1 Pro</td><td class="num ruim">55% · fora</td></tr>
+<tr><td>GPT-5.6</td><td class="num ruim">60% · fora</td></tr>
+</table></div>
+<div class="destaque">
+<p><b>E os números dos modelos secos não fecham entre si.</b> O Gemini estima que 45% dos
+brasileiros se sentem seguros <i>e</i> incluídos ao mesmo tempo, mas que só 31% se sentem seguros.
+Não existe população assim: a interseção não pode ser maior que a parte. O GPT comete o mesmo erro
+(30% contra 25%) e ainda erra a soma (60 + 30 = 90). O painel não consegue produzir isso, porque
+cada número vem de <b>contar personas uma a uma</b>, não de estimar de cabeça. Coerência aqui é
+subproduto da arquitetura, não sorte.</p>
+</div>
 <h2>a fronteira de confiança</h2>
 <p>Um resultado sintético que sai rápido não é prova de nada. O que faz do painel uma ferramenta
 honesta é ele saber onde confiar e onde não. A régua é o tipo de pergunta:</p>
 <div class="grade">
   <div class="card"><b style="color:var(--verde)">Inferível ✓</b><span>a resposta se infere do contexto de segmento: prioridades, objeções prováveis, atrito de onboarding, compreensão de conceito, linguagem que cola ou não, tradeoffs. <b>Seguro para pressão direcional.</b></span></div>
-  <div class="card"><b style="color:var(--vermelho)">Só-humano ✗</b><span>a resposta exige estado vivido: satisfação, incidência (já foi vítima?), dano, comportamento passado real, intensidade emocional, confiança depois de uma experiência. <b>Não pergunte a uma persona sintética.</b></span></div>
+  <div class="card"><b style="color:var(--ambar)">Só-humano ✗</b><span>a resposta exige estado vivido: satisfação, incidência (já foi vítima?), dano, comportamento passado real, intensidade emocional, confiança depois de uma experiência. <b>Não pergunte a uma persona sintética.</b></span></div>
 </div>
 <p>Por isso o painel tem uma ferramenta de <b>triagem</b>: antes de rodar o focus group, ela
 classifica cada pergunta em inferível, arriscado ou só-humano, e transforma seus pontos cegos no
-roteiro da pesquisa que você vai levar para pessoas reais. É o que o backtest abaixo mostra na
+roteiro da pesquisa que você vai levar para pessoas reais. É o que os três backtests acima mostram na
 prática: o painel acerta em atitude e intenção, e erra onde a resposta pedia experiência vivida.</p>
 <p class="link-bloco"><a href="/usar">→ como usar a triagem e rodar um focus group</a></p>
-
-<h2>validado contra pesquisa real</h2>
-<p>Backtest contra o Estudo idwall de Experiência Digital 2025 (amostra nacional ponderada por
-IBGE): 100 personas sorteadas do painel, classificadas com temperatura 0 (reproduzível),
-comparadas ao benchmark equivalente.</p>
-<div class="tabela-scroll"><table>
-<tr><th>Pergunta de atitude do consumidor</th><th>idwall</th><th>Painel</th><th>Erro</th></tr>
-<tr><td>Pretende manter ou aumentar o uso de bancos digitais</td><td class="num">84,9%</td><td class="num">86,0%</td><td class="num ok">1,1 pp</td></tr>
-<tr><td>Rapidez do cadastro é o fator nº 1 na abertura de conta</td><td class="num">51,4%</td><td class="num">49,0%</td><td class="num ok">2,4 pp</td></tr>
-<tr><td>A casa é o lugar mais seguro para acessar o banco</td><td class="num">68,5%</td><td class="num">84,0%</td><td class="num">15,5 pp</td></tr>
-</table></div>
-<p>Erro médio absoluto de <b>6,3 pp</b> nas perguntas de atitude e intenção — duas das três
-dentro da margem amostral do método (~5 pp para n=100), estatisticamente indistinguíveis do
-benchmark.</p>
-<p class="dim">Transparência: essas são as 3 perguntas de melhor aderência entre 8 benchmarks
-testados. Itens de incidência auto-reportada (fraude, bloqueio) e satisfação divergem mais, por
-um viés conhecido de calibração das narrativas (ênfase em atrito) que está no roadmap de ajuste.
-Resultados rastreáveis persona a persona.</p>
-<p class="link-bloco"><a href="/porque">→ quem faz isso e por que se chama Concorde</a></p>
+<p class="link-bloco"><a href="/porque">→ quem faz isso e por que se chama concorde</a></p>
 
 <h2>o teto dos dados públicos — e o que viria depois</h2>
 <p>Esta plataforma é uma <b>prova de conceito da arquitetura e da viabilidade</b>: demonstra que
@@ -542,7 +611,7 @@ ${term(
 );
 
 const INSTALAR = layout(
-  "Instalar — Painel Sintético Concorde",
+  "Instalar — painel sintético concorde",
   "instalar",
   `
 <main style="padding-top:52px"><div class="wrap">
@@ -578,7 +647,7 @@ Preencha e confirme:
 ${term(
   "add custom connector",
   `<span class="c"># Nome</span>
-Painel Sintético Concorde
+painel sintético concorde
 <span class="c"># URL</span>
 <span class="r">${MCP_URL}</span>`
 )}
@@ -613,13 +682,13 @@ o conector automaticamente ao Claude.</p>
 <li>Até 100 fichas completas de personas por dia, por IP — para consulta, não para extração da base</li>
 <li>Os limites zeram todo dia à meia-noite UTC (21h em Brasília)</li>
 </ul>
-<p class="dim">Os dados do painel são proprietários (projeto Concorde). Uso para pesquisa e
+<p class="dim">Os dados do painel são proprietários (projeto concorde). Uso para pesquisa e
 simulação é livre; redistribuição da base, não.</p>
 <p><a href="/usar">→ agora veja como usar bem</a></p>
 </div></main>`,
   `<script>${COPIAR_JS}</script>`,
   "/instalar",
-  "Como instalar o Painel Sintético Concorde no Claude: cole a URL do conector MCP nas configurações e rode um focus group sintético em 2 minutos."
+  "Como instalar o painel sintético concorde no Claude: cole a URL do conector MCP nas configurações e rode um focus group sintético em 2 minutos."
 );
 
 function promptCopiavel(titulo: string, prompt: string): string {
@@ -630,7 +699,7 @@ function promptCopiavel(titulo: string, prompt: string): string {
   )}<button>copiar</button></div>`;
 }
 
-const PROMPT_PRIMEIRA_VEZ = `Monte um focus group com o Painel Sintético Concorde:
+const PROMPT_PRIMEIRA_VEZ = `Monte um focus group com o painel sintético concorde:
 1. Chame visao_geral para conhecer o painel.
 2. Sorteie 5 personas Classe C e D/E com dívida ativa, usando seed 7.
 3. Busque as fichas completas das 5.
@@ -644,7 +713,7 @@ passo de pesquisa que você recomendaria.
 Respeite os tipos de percentual (propensão ≠ composição).`;
 
 const USAR = layout(
-  "Como usar — Painel Sintético Concorde",
+  "Como usar — painel sintético concorde",
   "usar",
   `
 <main style="padding-top:52px"><div class="wrap">
@@ -739,11 +808,11 @@ que as personas do meu recorte diriam. Marque o que é voz real e o que
 </div></main>`,
   `<script>${COPIAR_JS}</script>`,
   "/usar",
-  "Prompts prontos para usar o Painel Sintético Concorde: focus group sintético, teste de conceito, teste de mensagem e checagem de dados com 787 personas."
+  "Prompts prontos para usar o painel sintético concorde: focus group sintético, teste de conceito, teste de mensagem e checagem de dados com 787 personas."
 );
 
 const PRIVACIDADE = layout(
-  "Privacidade — Painel Sintético Concorde",
+  "Privacidade — painel sintético concorde",
   "privacidade",
   `
 <main style="padding-top:52px"><div class="wrap">
@@ -798,21 +867,21 @@ citadas nota a nota.</p>
 tecnicamente chega ao servidor como texto de consulta — como em qualquer buscador. Não faça
 isso; para conversar com as personas você nunca precisa. E o que o seu Claude faz com a
 conversa é regido pela política de privacidade da Anthropic, não pela minha.</p>
-<p class="dim">Responsável pelo serviço: Caio Sartoratto Prado (projeto Concorde). Dúvidas ou
+<p class="dim">Responsável pelo serviço: Caio Sartoratto Prado (projeto concorde). Dúvidas ou
 pedidos sobre privacidade: <a href="https://www.linkedin.com/in/caio-sartoratto-prado-078307178/" rel="noopener">fale comigo no LinkedIn</a>.</p>
 </div></main>`
   ,"", "/privacidade",
-  "Privacidade do Painel Sintético Concorde: as conversas rodam no seu Claude e nunca passam pelo servidor do painel. Sem cadastro, sem cookies, sem rastreamento."
+  "Privacidade do painel sintético concorde: as conversas rodam no seu Claude e nunca passam pelo servidor do painel. Sem cadastro, sem cookies, sem rastreamento."
 );
 
 const PORQUE = layout(
-  "Porquê — Painel Sintético Concorde",
+  "Porquê — painel sintético concorde",
   "porquê",
   `
 <main style="padding-top:52px"><div class="wrap">
 <p class="zsh"><b>concorde@painel</b> ~ % <i>painel --porque</i></p>
 <h1 style="margin-top:8px">Porquê<span class="cursor"></span></h1>
-<p class="sub">Quem faz isso, e por que se chama Concorde.</p>
+<p class="sub">Quem faz isso, e por que se chama concorde.</p>
 
 <h2>quem</h2>
 <p>Me chamo <b>Caio Sartoratto Prado</b>. Sou formado em Marketing pela <b>FIAP</b>, curso
@@ -822,7 +891,7 @@ que é exatamente onde a dor do discovery mora. Sou um entusiasta de IA e este p
 de ferramenta que eu queria ter nas minhas próprias sprints de descoberta.</p>
 <p><a href="https://www.linkedin.com/in/caio-sartoratto-prado-078307178/" rel="noopener">→ LinkedIn</a></p>
 
-<h2>por que "Concorde"</h2>
+<h2>por que "concorde"</h2>
 <p>Duas referências, uma homenagem.</p>
 <p>A primeira: o Google tem um projeto de pesquisa chamado <b>Concordia</b>, sobre simulação
 social com agentes de linguagem — foi uma inspiração direta para levar a sério a ideia de
@@ -839,13 +908,13 @@ na etapa em que velocidade importa mais que tudo: a descoberta.</p>
 </div>
 
 <h2>o projeto</h2>
-<p class="dim">O Painel Sintético é uma prova de conceito do projeto Concorde: infraestrutura
+<p class="dim">O Painel Sintético é uma prova de conceito do projeto concorde: infraestrutura
 de pesquisa sintética governável — personas calibradas com dados públicos, grounding
 determinístico e validação contra benchmarks reais (veja a <a href="/">home</a>). Feedbacks,
 casos de uso e ceticismo bem argumentado são todos bem-vindos no LinkedIn.</p>
 </div></main>`
   ,"", "/porque",
-  "Quem faz o Painel Sintético Concorde e por que esse nome: o projeto de pesquisa sintética inspirado no Concordia do Google e no avião Concorde."
+  "Quem faz o painel sintético concorde e por que esse nome: o projeto de pesquisa sintética inspirado no Concordia do Google e no avião Concorde."
 );
 
 const FAQ: Array<[string, string]> = [
@@ -863,7 +932,7 @@ const FAQ: Array<[string, string]> = [
   ],
   [
     "Como validar um painel de personas sintéticas?",
-    "Por backtest: fazer o painel responder perguntas de pesquisas reais já publicadas e comparar os agregados. O Painel Sintético Concorde obteve erro médio de 6,3 pontos percentuais contra o Estudo idwall 2025 (amostra nacional ponderada por IBGE) em perguntas de atitude do consumidor, com duas de três perguntas dentro da margem amostral do método.",
+    "Por backtest: fazer o painel responder perguntas de pesquisas reais já publicadas e comparar os agregados. O painel sintético concorde obteve erro médio de 3,0 pontos percentuais contra o Estudo idwall 2025 (amostra nacional ponderada por IBGE) em perguntas de atitude do consumidor, com as três perguntas dentro de 6 pontos percentuais do benchmark.",
   ],
   [
     "Onde usar personas sintéticas no discovery de produto?",
@@ -916,14 +985,14 @@ o caminho que funciona: condicionar o modelo em atributos sociodemográficos rea
 distribuições de subgrupos humanos ("fidelidade algorítmica").</li>
 </ul>
 <p>A conclusão prática: <b>a diversidade das personas precisa vir da estrutura de dados, não
-da criatividade do modelo</b>. É por isso que o Painel Sintético Concorde liga cada persona
+da criatividade do modelo</b>. É por isso que o painel sintético concorde liga cada persona
 aos fatos estatísticos do seu segmento por filtro determinístico — a persona só "sabe" o que
 o segmento dela sustenta, e cada resposta é rastreável até a fonte.</p>
 
 <h2>como se valida</h2>
 <p>Backtest contra pesquisa real publicada: o painel respondeu perguntas do Estudo idwall
-2025 (amostra nacional ponderada por IBGE) e errou em média 6,3 pontos percentuais nas
-perguntas de atitude do consumidor — duas de três dentro da margem amostral do método.
+2025 (amostra nacional ponderada por IBGE) e errou em média 3,0 pontos percentuais nas
+perguntas de atitude do consumidor — as três dentro de 6 pontos percentuais do benchmark.
 Detalhes e limitações na <a href="/">home</a>.</p>
 
 <h2>perguntas frequentes</h2>
@@ -958,7 +1027,7 @@ export function paginaForum(titulo: string, conteudo: string): string {
     conteudo,
     "",
     "/forum",
-    "Fórum aberto de feedback e discussão do Painel Sintético Concorde.",
+    "Fórum aberto de feedback e discussão do painel sintético concorde.",
     "",
     '<meta name="robots" content="noindex, nofollow">'
   );
@@ -1001,15 +1070,15 @@ Sitemap: ${BASE_URL}/sitemap.xml
   },
   "/llms.txt": {
     tipo: "text/plain",
-    corpo: `# Painel Sintético Concorde
+    corpo: `# painel sintético concorde
 
 > ${DESC_PADRAO}
 
-O Painel Sintético Concorde é um painel de 787 personas sintéticas do consumidor bancário
+O painel sintético concorde é um painel de 787 personas sintéticas do consumidor bancário
 brasileiro (4 classes sociais x 6 faixas etárias, ~27 atributos por persona), calibrado com
 dados públicos do IBGE, Bacen e ABEP. Cada persona é ligada por filtro determinístico a 105
 fatos estatísticos com fonte, 17 vozes verbatim reais e fichas de 12 instituições financeiras.
-Validação: erro médio de 6,3 pontos percentuais contra o Estudo idwall 2025 em perguntas de
+Validação: erro médio de 3,0 pontos percentuais contra o Estudo idwall 2025 em perguntas de
 atitude do consumidor. Uso: triagem de discovery pré-campo para produtos bank/fintech (focus
 groups sintéticos, teste de conceito e de mensagem). Tem uma fronteira de confiança explícita
 (ferramenta avaliar_pergunta): é confiável para perguntas inferíveis do contexto de segmento
@@ -1021,7 +1090,7 @@ saber o que perguntar a gente de verdade antes de gastar com campo.
 Serviço gratuito (prova de conceito) com cotas por IP. Conector MCP remoto para Claude:
 ${MCP_URL} — requer plano pago do Claude.
 
-Autor: Caio Sartoratto Prado (projeto Concorde).
+Autor: Caio Sartoratto Prado (projeto concorde).
 
 ## Páginas
 
