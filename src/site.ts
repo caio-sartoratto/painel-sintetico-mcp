@@ -157,6 +157,7 @@ function layout(
   return `<!doctype html>
 <html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>${titulo}</title>
 <meta name="description" content="${desc}">
 <link rel="canonical" href="${BASE_URL}${caminho}">
@@ -1041,6 +1042,9 @@ export function paginaForum(titulo: string, conteudo: string): string {
 }
 
 const HOJE = new Date().toISOString().slice(0, 10);
+// Favicon: mini grafo de conhecimento (estilo Obsidian da home). Nó central azul (painel)
+// ligado a satélites verde (fato), roxo (voz) e cinza (dado).
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#000000"/><g stroke="#8e8e93" stroke-width="1.1" opacity=".55"><line x1="16" y1="16" x2="8" y2="8"/><line x1="16" y1="16" x2="25" y2="9"/><line x1="16" y1="16" x2="25" y2="24"/><line x1="16" y1="16" x2="8" y2="24"/></g><circle cx="8" cy="8" r="2.3" fill="#27c93f"/><circle cx="25" cy="9" r="2" fill="#bf9ffb"/><circle cx="25" cy="24" r="2.4" fill="#8e8e93"/><circle cx="8" cy="24" r="2" fill="#5aa6ff"/><circle cx="16" cy="16" r="3.9" fill="#5aa6ff"/></svg>`;
 export const EXTRAS: Record<string, { corpo: string; tipo: string }> = {
   "/sitemap.xml": {
     tipo: "application/xml",
@@ -1108,5 +1112,45 @@ Autor: Caio Sartoratto Prado (projeto concorde).
 - [Privacidade](${BASE_URL}/privacidade): conversas rodam no Claude do usuário, nunca no servidor
 - [Porquê](${BASE_URL}/porque): autor e origem do nome
 `,
+  },
+  "/favicon.svg": { tipo: "image/svg+xml", corpo: FAVICON_SVG },
+  "/favicon.ico": { tipo: "image/svg+xml", corpo: FAVICON_SVG },
+  "/.well-known/mcp.json": {
+    tipo: "application/json",
+    corpo: JSON.stringify(
+      {
+        name: "painel-sintetico-concorde",
+        displayName: "Painel Sintético Concorde",
+        description: DESC_PADRAO,
+        version: "1.0.0",
+        author: "Caio Sartoratto Prado",
+        homepage: BASE_URL,
+        documentation: `${BASE_URL}/instalar`,
+        registry: "io.github.caio-sartoratto/painel-sintetico-concorde",
+        mcp: { url: MCP_URL, transport: "streamable-http", authentication: "none" },
+        pricing: "gratuito, com cotas por IP",
+      },
+      null,
+      2,
+    ),
+  },
+  "/.well-known/ai-plugin.json": {
+    tipo: "application/json",
+    corpo: JSON.stringify(
+      {
+        schema_version: "v1",
+        name_for_human: "Painel Sintético Concorde",
+        name_for_model: "painel_sintetico_concorde",
+        description_for_human: DESC_PADRAO,
+        description_for_model:
+          "Painel de 787 personas sintéticas do consumidor bancário brasileiro, calibrado com dados públicos (IBGE, Bacen, ABEP), para discovery de produtos bank e fintech. Acesse pelas ferramentas do conector MCP.",
+        auth: { type: "none" },
+        api: { type: "mcp", url: MCP_URL },
+        logo_url: `${BASE_URL}/favicon.svg`,
+        legal_info_url: `${BASE_URL}/privacidade`,
+      },
+      null,
+      2,
+    ),
   },
 };
