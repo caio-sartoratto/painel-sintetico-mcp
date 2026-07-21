@@ -822,29 +822,35 @@ const PRIVACIDADE = layout(
 É consequência da arquitetura, não de uma promessa.</p>
 
 <h2>onde a conversa acontece</h2>
-<p>Quando você pergunta algo às personas, quem processa a pergunta e gera as respostas é o
-<b>seu Claude</b>, na sua conta. Esse conteúdo trafega entre você e a Anthropic — <b>nunca passa
-pelo meu servidor</b>. O painel é só um banco de dados que o seu Claude consulta.</p>
+<p>Quando você conversa com as personas, quem gera as respostas é o <b>seu Claude</b>, na sua
+conta. Essa conversa, o que você escreve e o que as personas respondem, trafega entre você e a
+Anthropic e <b>não passa pelo meu servidor</b>. O que o meu servidor recebe são só os argumentos
+das ferramentas que o seu Claude chama, listados abaixo.</p>
 ${term(
   "fluxo de dados",
   `<span class="c"># o que fica entre você e o seu Claude (eu não vejo):</span>
    suas perguntas · o conceito que você está testando ·
    as respostas das personas · toda a conversa
 
-<span class="c"># o que chega ao meu servidor (chamadas de ferramenta):</span>
-   filtros estruturados     <span class="r">"classe_social == 'Classe C'"</span>
-   ids de personas pedidas  <span class="r">get_personas(['PERS_023'])</span>
-   termos de busca de fatos <span class="r">buscar_fatos("pix golpes")</span>`
+<span class="c"># o que TRANSITA pelo servidor (argumentos das ferramentas,</span>
+<span class="c"># processados na hora, não guardados como texto):</span>
+   filtros estruturados       <span class="r">"classe_social == 'Classe C'"</span>
+   ids de personas pedidas    <span class="r">get_personas(['PERS_023'])</span>
+   termos de busca de fatos   <span class="r">buscar_fatos("pix golpes")</span>
+   a pergunta que você avalia  <span class="r">avaliar_pergunta("quão satisfeito...")</span>`
 )}
 
 <h2>o que eu consigo saber, no máximo</h2>
+<p>Os argumentos acima são processados na hora e descartados. O que o servidor <b>guarda</b> é só
+métrica anônima e agregada:</p>
 <ul>
-<li><b>Quais personas e recortes são mais consultados</b> — útil para eu melhorar o painel (ex.: reforçar segmentos muito usados).</li>
-<li><b>Termos de busca de fatos</b>, quando o seu Claude usa a busca textual (ex.: "pix golpes") — texto de consulta, sem vínculo com quem enviou.</li>
-<li>Volume de uso agregado (contadores de cota por IP, que zeram diariamente).</li>
+<li><b>Quais ferramentas foram usadas e com que frequência</b>, para eu saber o que é mais útil.</li>
+<li><b>Quais ids de persona foram puxados</b> (ex.: PERS_023), para reforçar os segmentos mais consultados.</li>
+<li>Contadores de cota por IP, com o IP entrando só como hash, que zeram diariamente.</li>
 </ul>
-<p class="dim">E o que eu <b>não</b> consigo saber: quem você é, o que você perguntou às
-personas, o que elas responderam, ou qual produto você está desenvolvendo.</p>
+<p class="dim">O que eu <b>não</b> guardo nem consigo ler: quem você é, o texto das suas perguntas
+(inclusive as que você manda avaliar), seus filtros, suas buscas de fatos, o que as personas
+responderam, ou qual produto você está desenvolvendo. Nada disso é registrado.</p>
 
 <h2>o que o serviço não tem</h2>
 <ul class="dim">
@@ -863,10 +869,11 @@ qualquer identificação dos autores. Os fatos vêm de fontes públicas (IBGE, B
 citadas nota a nota.</p>
 
 <h2>uma honestidade final</h2>
-<p class="dim">Se você digitar informação sensível dentro de um termo de busca de fatos, ela
-tecnicamente chega ao servidor como texto de consulta — como em qualquer buscador. Não faça
-isso; para conversar com as personas você nunca precisa. E o que o seu Claude faz com a
-conversa é regido pela política de privacidade da Anthropic, não pela minha.</p>
+<p class="dim">Se você digitar informação sensível dentro de um termo de busca ou de uma pergunta
+enviada para avaliação, ela tecnicamente trafega até o servidor como texto, para ser processada
+na hora, como em qualquer buscador. Eu não guardo esse texto, mas, por via das dúvidas, evite;
+para conversar com as personas você nunca precisa. E o que o seu Claude faz com a conversa é
+regido pela política de privacidade da Anthropic, não pela minha.</p>
 <p class="dim">Responsável pelo serviço: Caio Sartoratto Prado (projeto concorde). Dúvidas ou
 pedidos sobre privacidade: <a href="https://www.linkedin.com/in/caio-sartoratto-prado-078307178/" rel="noopener">fale comigo no LinkedIn</a>.</p>
 </div></main>`

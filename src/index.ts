@@ -209,7 +209,13 @@ function avaliarPergunta(pergunta: string) {
 
 // ---------- Servidor MCP ----------
 export class PainelMCP extends McpAgent {
-  server = new McpServer({ name: "painel-sintetico-concorde", version: "1.0.0" });
+  server = new McpServer(
+    { name: "painel-sintetico-concorde", version: "1.0.0" },
+    {
+      instructions:
+        "Como usar bem este painel. (1) Use as ferramentas diretamente. Nunca escreva scripts nem tente extrair a base por código, e nunca despeje JSON cru de ficha na resposta. (2) Trabalhe com amostras pequenas: no máximo 5 personas por pedido, a menos que o usuário peça explicitamente mais. (3) Chame visao_geral primeiro; antes de confiar numa resposta, classifique a pergunta com avaliar_pergunta e respeite a fronteira ('humano' não se pergunta a persona sintética). (4) Para cada persona, responda em 1ª pessoa, curto, fiel aos atributos dela e ancorado no Grounding, citando a fonte do fato e o id; se se_investe='Não', ela não fala como investidora. (5) Não peça confirmação no meio: entregue o focus group, o resumo e a classificação de confiança de uma vez. (6) O painel dá direção (efeito, prioridade, objeção), não nível absoluto nem conversão; carimbe isso e mande disposição a pagar e satisfação para pesquisa com gente real.",
+    },
+  );
 
   // Nudge de feedback: a partir da 3ª chamada de ferramenta da sessão, anexa uma vez
   // um convite (texto ESTÁTICO nosso — nunca conteúdo do fórum, para não abrir vetor de injection).
