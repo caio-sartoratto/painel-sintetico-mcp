@@ -122,7 +122,8 @@ button.perigo{background:transparent;color:var(--vermelho);border:1px solid var(
 .post .quando{color:var(--dim);font-size:.75em;margin-left:8px}
 .post .texto{margin-top:8px;white-space:pre-wrap;word-break:break-word}
 .aviso-forum{color:var(--dim);font-size:.82em;border-left:3px solid var(--borda);padding-left:12px;margin:16px 0}
-@media (prefers-reduced-motion: reduce){.msg,.status-demo,.passo-demo,.ficha-card,.chip{opacity:1!important;transform:none!important}}
+@media (prefers-reduced-motion: reduce){.msg,.status-demo,.passo-demo,.ficha-card,.chip{opacity:1!important;transform:none!important}.cursor,.digitando::after{animation:none!important}}
+@media (max-width:640px){nav .wrap{flex-wrap:nowrap;overflow-x:auto;gap:18px;-webkit-overflow-scrolling:touch}nav .logo{display:none}nav a{padding:4px 0;white-space:nowrap}}
 `;
 
 function janela(titulo: string, corpo: string, classe = ""): string {
@@ -262,7 +263,7 @@ addEventListener('resize',()=>{clearTimeout(tR);tR=setTimeout(()=>{
   wAnt=innerWidth;medir();criar();},200);});
 cv.parentElement.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;});
 cv.parentElement.addEventListener('mouseleave',()=>{mouse.x=-1e4;mouse.y=-1e4;});
-medir();criar();loop();
+medir();criar();if(matchMedia('(prefers-reduced-motion: reduce)').matches){desenhar();}else{loop();}
 `;
 
 const DEMO_JS = `
@@ -414,6 +415,7 @@ ${janela(
   <p class="sub">Um painel da população bancarizada brasileira, calibrado com dados públicos
   (IBGE, Bacen), que responde perguntas de pesquisa em 1ª pessoa — direto no seu Claude.
   Teste conceitos, explore segmentos e ouça objeções antes de gastar com pesquisa de campo.</p>
+  <p style="margin-top:14px;font-size:.95em"><b style="color:var(--verde)">erro médio 3,3 pp</b> vs pesquisa de campo real — <b>6x menor que o GPT-5.6</b> e 3,7x menor que o Gemini.</p>
   <p style="margin-top:18px"><a href="/instalar">→ instalar o conector</a>&nbsp;&nbsp;&nbsp;<a href="/usar">→ como usar</a></p>
   </div>`
 )}
@@ -523,7 +525,7 @@ gradiente social da insegurança financeira, com o penhasco caindo entre a class
 </table></div>
 <p class="dim">Amostra estratificada por classe, temperatura 0. O gradiente é output do painel (o
 benchmark não tem quebra por classe): evidência de que a heterogeneidade vem da estrutura de
-dados, não da criatividade do modelo.</p>
+dados, não da criatividade do modelo. O agregado de 78% citado acima é <b>ponderado pela distribuição real da população</b> (majoritariamente C e D/E), não a média simples destas linhas; por isso esta quebra usa amostra estratificada, com n por classe distinto das 100 personas dos backtests 1 e 2.</p>
 <p class="dim">Uma nota sobre o recorte: nos três estudos, o painel é comparado nas perguntas de
 atitude e percepção, que é o que ele foi construído para responder. Perguntas que dependem de
 experiência vivida (ter sido vítima de fraude, satisfação após um atendimento) ficam fora de
@@ -871,6 +873,8 @@ ficam no seu Claude — só o filtro de segmento chega ao servidor.</p>
 <div class="card"><b>get_instituicao</b><span>ficha de cada banco</span></div>
 <div class="card"><b>get_distribuicoes</b><span>tabelas de calibração do painel</span></div>
 </div>
+<p class="link-bloco" style="margin-top:28px">Ainda não instalou? <a href="/instalar">→ conecte o painel em 2 minutos</a></p>
+<p class="link-bloco">Usou e quer dar retorno? <a href="/forum">→ deixe um feedback no fórum</a></p>
 </div></main>`,
   `<script>${COPIAR_JS}</script>`,
   "/usar",
@@ -988,7 +992,7 @@ na etapa em que velocidade importa mais que tudo: a descoberta.</p>
 <p class="dim">O Painel Sintético é uma prova de conceito do projeto concorde: infraestrutura
 de pesquisa sintética governável — personas calibradas com dados públicos, grounding
 determinístico e validação contra benchmarks reais (veja a <a href="/">home</a>). Feedbacks,
-casos de uso e ceticismo bem argumentado são todos bem-vindos no LinkedIn.</p>
+casos de uso e ceticismo bem argumentado são bem-vindos no <a href="/forum">fórum do painel</a> ou no LinkedIn.</p>
 </div></main>`
   ,"", "/porque",
   "Quem faz o painel sintético concorde e por que esse nome: o projeto de pesquisa sintética inspirado no Concordia do Google e no avião Concorde."
