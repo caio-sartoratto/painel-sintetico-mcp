@@ -10,10 +10,16 @@ type Persona = Record<string, any>;
 const personas = personasData as Persona[];
 
 const MODELO_FANOUT = "gemini-3.6-flash"; // pesado: 1 chamada por persona
-const MODELO_REDATOR = "gemini-3.1-pro"; // redação do card
-const MODELO_VALIDADOR = "gemini-3.1-pro"; // revisão/validação crítica
+const MODELO_REDATOR = "gemini-3.1-pro-preview"; // redação do card
+const MODELO_VALIDADOR = "gemini-3.1-pro-preview"; // revisão/validação crítica
 const N_AMOSTRA = 16;
 const BASE_URL = "https://painel.concorde-painel.workers.dev";
+
+// responseSchema: garante JSON válido do Gemini (corpo HTML com aspas não quebra mais o parse).
+const S = (props: any, req: string[]) => ({ type: "OBJECT", properties: props, required: req });
+const SCHEMA_FANOUT = S({ escolha: { type: "STRING" }, verbatim: { type: "STRING" }, fonte: { type: "STRING" } }, ["escolha", "verbatim"]);
+const SCHEMA_REDATOR = S({ titulo: { type: "STRING" }, corpo: { type: "STRING" }, leitura: { type: "STRING" } }, ["titulo", "corpo", "leitura"]);
+const SCHEMA_VALIDADOR = S({ aprovado: { type: "BOOLEAN" }, nota: { type: "NUMBER" }, problemas: { type: "ARRAY", items: { type: "STRING" } }, correcao: { type: "STRING" } }, ["aprovado"]);
 
 // Fila de temas — banda INFERÍVEL apenas (preferência/prioridade/objeção; nunca estado vivido).
 const ROTACAO: Array<{ slug: string; tema: string; pergunta: string; opcoes: string[] }> = [
@@ -32,12 +38,12 @@ const ROTACAO: Array<{ slug: string; tema: string; pergunta: string; opcoes: str
 ];
 
 // ---------- Gemini ----------
-async function gemini(model: string, system: string, prompt: string, apiKey: string): Promise<any> {
+async function gemini(model: string, system: string, prompt: string, apiKey: string, schema?: any): Promise<any> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const body = {
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0, responseMimeType: "application/json" },
+    generationConfig: { temperature: 0, responseMimeType: "application/json", ...(schema ? { responseSchema: schema } : {}) },
   };
   const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`Gemini ${model} ${r.status}: ${(await r.text()).slice(0, 160)}`);
@@ -64,7 +70,7 @@ async function fanOut(pergunta: string, opcoes: string[], amostraP: Persona[], a
   const res = await Promise.all(amostraP.map(async (p) => {
     const prompt = `Atributos: ${JSON.stringify(mini(p))}\nGrounding:\n${(p.grounding ?? "").slice(0, 2500)}\n\nPergunta: "${pergunta}"\nOpções: ${JSON.stringify(opcoes)}\nResponda JSON: {"escolha": "<uma opção EXATA da lista>", "verbatim": "1 frase em 1ª pessoa fiel à ficha", "fonte": "id ou estatística do Grounding que embasa"}`;
     try {
-      const a = await gemini(MODELO_FANOUT, sys, prompt, apiKey);
+      const a = await gemini(MODELO_FANOUT, sys, prompt, apiKey, SCHEMA_FANOUT);
       const escolha = opcoes.find((o) => o.toLowerCase() === String(a.escolha ?? "").toLowerCase()) ?? null;
       if (!escolha) return null;
       return { id: p.id, escolha, verbatim: String(a.verbatim ?? "").slice(0, 320), fonte: String(a.fonte ?? "").slice(0, 160), perfil: `${p.idade}a, ${p.profissao}, ${p.classe_social} (${p.regiao})` };
@@ -84,13 +90,13 @@ function agrega(respostas: any[], opcoes: string[]) {
 async function redator(tema: string, pergunta: string, agg: any, verbatims: any[], apiKey: string, ajuste = "") {
   const sys = "Você é o redator do Pulso Concorde, especialista em cards curtos e afiados sobre a opinião do consumidor bancário brasileiro, ancorados em dados sintéticos. REGRAS INEGOCIÁVEIS: (1) o painel dá DIREÇÃO, não nível absoluto — NUNCA escreva 'X% dos brasileiros'; escreva 'na amostra' ou 'o painel projeta'; (2) sempre honesto, sem hype nem promessa; (3) use só os verbatims fornecidos e cite a fonte deles; (4) corpo com 2 a 3 parágrafos em <p>...</p>, mais uma leitura de 1 frase. Responda só JSON.";
   const prompt = `Tema: ${tema}\nPergunta: ${pergunta}\nDistribuição (amostra sintética n=${agg.n}): ${JSON.stringify(agg.dist)}\nVerbatims disponíveis: ${JSON.stringify(verbatims)}\n${ajuste ? "AJUSTE PEDIDO PELO EDITOR: " + ajuste + "\n" : ""}\nEscreva JSON: {"titulo": "manchete curta e específica (sem % absoluto)", "corpo": "2-3 parágrafos <p>...</p> analisando a direção e citando 1-2 verbatims com a fonte", "leitura": "1 frase: o que isso sugere para quem constrói produto bank/fintech"}`;
-  return await gemini(MODELO_REDATOR, sys, prompt, apiKey);
+  return await gemini(MODELO_REDATOR, sys, prompt, apiKey, SCHEMA_REDATOR);
 }
 
 async function validador(rascunho: any, agg: any, verbatims: any[], pergunta: string, apiKey: string) {
   const sys = "Você é o editor-crítico rigoroso do Pulso Concorde e o guardião da credibilidade. REPROVE se o rascunho: inventou número ou usou número fora da distribuição; fez claim de nível absoluto ('X% dos brasileiros') sem enquadrar como direção/amostra; tem tom vendedor/hype/promessa; usa verbatim que não está na lista; ou trata a pergunta como se medisse estado vivido (satisfação, vitimização). Responda só JSON.";
   const prompt = `Pergunta: ${pergunta}\nDistribuição real: ${JSON.stringify(agg.dist)}\nVerbatims válidos: ${JSON.stringify(verbatims.map((v) => v.verbatim))}\nRascunho: ${JSON.stringify(rascunho)}\n\nResponda JSON: {"aprovado": true, "nota": 0-10, "problemas": ["..."], "correcao": "instrução curta pro redator se reprovado, senão string vazia"}`;
-  return await gemini(MODELO_VALIDADOR, sys, prompt, apiKey);
+  return await gemini(MODELO_VALIDADOR, sys, prompt, apiKey, SCHEMA_VALIDADOR);
 }
 
 export async function gerarPulso(apiKey: string, itemIndex: number) {
@@ -119,14 +125,15 @@ export async function gerarPulso(apiKey: string, itemIndex: number) {
 // ---------- Storage (Durable Object) ----------
 export class PulsoDO extends DurableObject {
   private async idx(k: string): Promise<string[]> { return ((await this.ctx.storage.get(k)) as string[] | undefined) ?? []; }
-  async gerarESalvar(apiKey: string): Promise<string> {
+  async proximoPtr(): Promise<number> {
     const ptr = ((await this.ctx.storage.get("rot:ptr")) as number | undefined) ?? 0;
-    const entry: any = await gerarPulso(apiKey, ptr);
+    await this.ctx.storage.put("rot:ptr", ptr + 1);
+    return ptr;
+  }
+  async salvarRascunho(entry: any): Promise<void> {
     await this.ctx.storage.put(`e:${entry.slug}`, entry);
     const d = await this.idx("idx:draft");
     if (!d.includes(entry.slug)) { d.unshift(entry.slug); await this.ctx.storage.put("idx:draft", d); }
-    await this.ctx.storage.put("rot:ptr", ptr + 1);
-    return entry.slug;
   }
   async obter(slug: string): Promise<any> { return (await this.ctx.storage.get(`e:${slug}`)) as any; }
   async listar(status: "publicado" | "rascunho"): Promise<any[]> {
@@ -151,6 +158,15 @@ export class PulsoDO extends DurableObject {
     await this.ctx.storage.delete(`e:${slug}`);
     await this.ctx.storage.put("idx:draft", (await this.idx("idx:draft")).filter((x) => x !== slug));
   }
+}
+
+// Roda a geração NO CONTEXTO DO WORKER (código sempre atualizado no deploy); o DO só guarda.
+export async function gerarPulsoDoDia(env: any): Promise<string> {
+  const doo = env.PULSO.get(env.PULSO.idFromName("global")) as any;
+  const ptr = await doo.proximoPtr();
+  const entry = await gerarPulso(env.GEMINI_API_KEY, ptr);
+  await doo.salvarRascunho(entry);
+  return entry.slug;
 }
 
 // ---------- Render ----------
@@ -275,7 +291,7 @@ export async function rotaPulso(request: Request, env: any, pathname: string): P
       return html(adminHtml(token, await doo().listar("rascunho"), await doo().listar("publicado")), { "Cache-Control": "no-store" });
     }
     if (request.method === "POST" && pathname === "/admin/pulso/gerar") {
-      try { await doo().gerarESalvar(env.GEMINI_API_KEY); } catch (e: any) { return new Response("Erro ao gerar: " + e.message, { status: 500 }); }
+      try { await gerarPulsoDoDia(env); } catch (e: any) { return new Response("Erro ao gerar: " + e.message, { status: 500 }); }
       return Response.redirect(`${BASE_URL}/admin/pulso?token=${encodeURIComponent(token)}`, 303);
     }
     if (request.method === "POST" && pathname === "/admin/pulso/publicar") {

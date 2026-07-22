@@ -5,7 +5,7 @@ import { rotaForum } from "./forum";
 export { ForumDO } from "./forum";
 import { rotaStats, registraPagina, registraMcp } from "./stats";
 export { StatsDO } from "./stats";
-import { rotaPulso } from "./pulso";
+import { rotaPulso, gerarPulsoDoDia } from "./pulso";
 export { PulsoDO } from "./pulso";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -587,6 +587,6 @@ export default {
   async scheduled(_event: ScheduledEvent, env: any, ctx: ExecutionContext) {
     // Pulso do dia: gera o rascunho via Gemini (semi-auto — aprovação humana em /admin/pulso).
     if (!env.GEMINI_API_KEY) return;
-    ctx.waitUntil((env.PULSO.get(env.PULSO.idFromName("global")) as any).gerarESalvar(env.GEMINI_API_KEY));
+    ctx.waitUntil(gerarPulsoDoDia(env));
   },
 };
