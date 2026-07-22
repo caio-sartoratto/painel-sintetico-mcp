@@ -381,7 +381,7 @@ export class PainelMCP extends McpAgent {
 
     this.server.tool(
       "buscar_fatos",
-      "Busca nos 105 fatos estatísticos. Modos: texto livre (busca em métrica/fonte/corpo), por eixo (por-classe, por-regiao, por-genero, por-investidor, por-divida, por-idade, por-fonte-renda, por-renda, por-composto, populacional), ou por persona_id (fatos cujo filtro casa com a persona).",
+      "Busca nos 105 fatos estatísticos. Modos: texto livre (busca em métrica/fonte/corpo), por eixo (por-classe, por-regiao, por-genero, por-investidor, por-divida, por-idade, por-fonte-renda, por-composto, populacional), ou por persona_id (fatos cujo filtro casa com a persona).",
       {
         texto: z.string().optional().describe("Busca textual livre"),
         eixo: z.string().optional().describe("Eixo de segmentação"),
