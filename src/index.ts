@@ -407,7 +407,7 @@ export class PainelMCP extends McpAgent {
 
     this.server.tool(
       "listar_vozes",
-      "Vozes verbatim REAIS (reviews, relatos) por tema: credito-divida, canais-tecnologia, tarifas-cobranca, golpes-seguranca, gestao-financeira. Sem tema, lista todas. Representatividade não-populacional — use como ilustração de linguagem, não como estatística.",
+      "Vozes verbatim REAIS (reviews, relatos) por tema: atendimento, bloqueio, canais, credito, endividamento, gestao-financeira, golpes, pix, tarifas (busca por substring no id/tema). Sem tema, lista todas as 17. Representatividade não-populacional — use como ilustração de linguagem, não como estatística.",
       { tema: z.string().optional().describe("Filtro por tema/id"), completo: z.boolean().default(true).describe("Incluir texto completo") },
       async ({ tema, completo }) => {
         let res = vozes;
