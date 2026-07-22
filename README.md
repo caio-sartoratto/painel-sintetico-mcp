@@ -36,6 +36,22 @@ viés de renda/escolaridade (Santurkar et al. 2023; Bisbee et al. 2024). O camin
 heterogeneidade vem da estrutura: cada persona é ligada por **filtro determinístico**
 (`campo operador valor`) a fatos estatísticos com fonte, e o LLM só dá voz.
 
+## Dois modos: focus group e pesquisa
+
+- **Focus group** (exploração qualitativa): `filtrar_personas`/`sortear_amostra` + `get_personas`.
+  O Claude dá voz a um recorte pequeno de personas para você ouvir objeções e afiar hipóteses.
+- **Pesquisa direcional** (medição): `preparar_pesquisa` faz **fan-out isolado** — o host dispara
+  uma tarefa/subagente por persona, cada uma responde sem ver as outras, e a distribuição é
+  agregada localmente. Isso evita a convergência artificial de respostas geradas no mesmo contexto.
+  Formatos: `escolha` (distribuição), `pontuar` (nota 0-10 por atributo → média+desvio por opção,
+  preserva a preferência secundária), `escala` e `aberta`. O `seed` é aleatório por padrão e
+  devolvido no resultado para reprodução. **É o mecanismo por trás dos backtests abaixo.**
+
+Privacidade por construção: a **pergunta do usuário não trafega pelo servidor**. A fronteira de
+confiança é classificada **localmente** no Claude (a ferramenta `avaliar_pergunta` devolve só a
+rubrica), e as respostas das personas são agregadas no host — o servidor recebe apenas o filtro de
+segmento, o número de personas e o formato.
+
 ## Validação (backtest contra pesquisa real)
 
 100 personas sorteadas do painel, classificadas com temperatura 0 (reproduzível), comparadas a
@@ -109,9 +125,11 @@ vault Obsidian (fonte da verdade: personas + fatos + vozes + instituições)
         ▼
 Cloudflare Worker
  ├─ /mcp        servidor MCP (agents SDK / McpAgent + Durable Object)
- │              9 ferramentas: visao_geral, avaliar_pergunta (fronteira de
- │              confiança), filtrar_personas, sortear_amostra, get_personas,
- │              buscar_fatos, listar_vozes, get_instituicao, get_distribuicoes
+ │              10 ferramentas: visao_geral, avaliar_pergunta (rubrica da
+ │              fronteira p/ classificação LOCAL), filtrar_personas,
+ │              sortear_amostra, preparar_pesquisa (fan-out isolado),
+ │              get_personas, buscar_fatos, listar_vozes, get_instituicao,
+ │              get_distribuicoes
  ├─ QuotaDO     cotas por IP (rajada/dia + teto de fichas: anti-extração)
  ├─ /           site estático server-rendered (zero framework)
  ├─ /forum      fórum anônimo sem moderação prévia (ForumDO) — nunca exposto via MCP

@@ -9,5 +9,9 @@ a demonstração. Reproduza qualquer um copiando o prompt no seu Claude com o co
 - [`teste-conceito-classe-a.md`](teste-conceito-classe-a.md) — reação de investidor Classe A a uma proposta de benefícios premium
 - [`checagem-de-dado.md`](checagem-de-dado.md) — usando o painel como fonte de estatística rastreável (propensão × composição)
 
+Os exemplos acima são do modo **focus group** (qualitativo). Para o modo **pesquisa direcional**
+(medição por fan-out isolado com `preparar_pesquisa`, que produz distribuição/notas com dispersão),
+veja o passo a passo em [/usar#pesquisa](https://painel.concorde-painel.workers.dev/usar#pesquisa).
+
 > Cada persona só "sabe" o que o segmento dela sustenta estatisticamente. Toda afirmação de número
 > nas respostas está ancorada num fato do Grounding, com fonte.

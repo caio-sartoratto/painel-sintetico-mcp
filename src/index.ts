@@ -148,8 +148,8 @@ function ok(data: unknown) {
 // O painel é forte onde a resposta se infere do contexto de segmento (prioridade, objeção,
 // atrito de onboarding, compreensão de conceito, linguagem, tradeoff) e fraco onde exige
 // estado vivido (satisfação, incidência, dano, comportamento passado real, intensidade
-// emocional, confiança após experiência). Esta triagem é heurística e determinística: sinaliza
-// perguntas prováveis de estado-vivido para o operador não confundir inferência com experiência.
+// emocional, confiança após experiência). A classificação é feita LOCALMENTE pelo host (Claude):
+// a pergunta do usuário não trafega pelo servidor — ver RUBRICA_FRONTEIRA e a ferramenta avaliar_pergunta.
 const FRAMEWORK_CONFIANCA = {
   inferivel: {
     rotulo: "Seguro para pressão direcional de conceito.",
@@ -165,47 +165,17 @@ const FRAMEWORK_CONFIANCA = {
   },
 };
 
-const FLAGS_HUMANO: Array<[RegExp, string]> = [
-  [/satisfa|satisfeit|quão feliz|felicidade|gost(ou|aram|a) d|contente|nps\b|csat/i, "satisfação / sentimento vivido"],
-  [/vítim|golpe|fraud|trauma|sofreu|prejuíz|perde(u|ram) (dinheiro|grana|tudo)|humilha|vergonh/i, "dano ou experiência sensível"],
-  [/j[áa] (foi|aconteceu|passou|caiu|sofreu|teve|deixou)|quantas vezes|no [úu]ltimo (m[êe]s|ano|dia)|hist[óo]rico de|o que voc[êe] fez quando|voc[êe] chegou a|alguma vez voc[êe]/i, "incidência ou comportamento passado real"],
-  [/confia (mais|menos|depois)|o quanto voc[êe] confia|qu[ãa]o (irritad|brav|com raiva|com medo|frustrad)|intensidade emocional/i, "confiança ou emoção após experiência real"],
-  [/como (voc[êe] )?se sentiu|o que voc[êe] sentiu|como foi (passar|viver|quando)|o que passou pela sua cabe[çc]a quando/i, "emoção recordada de um evento vivido"],
-];
-const FLAGS_ARRISCADO: Array<[RegExp, string]> = [
-  [/com que frequ[êe]ncia|quantas vezes por|quanto tempo por dia|costuma usar quant|hábito de/i, "frequência/hábito auto-reportado"],
-  [/quanto voc[êe] (gasta|paga|investe|guarda)|qual seu (gasto|or[çc]amento|sal[áa]rio)/i, "valor auto-reportado"],
-];
-
-function avaliarPergunta(pergunta: string) {
-  const q = pergunta ?? "";
-  const humano = FLAGS_HUMANO.filter(([re]) => re.test(q)).map(([, d]) => d);
-  if (humano.length)
-    return {
-      pergunta,
-      banda: "humano",
-      confie: false,
-      sinais_detectados: [...new Set(humano)],
-      recomendacao: FRAMEWORK_CONFIANCA.humano.rotulo,
-    };
-  const arriscado = FLAGS_ARRISCADO.filter(([re]) => re.test(q)).map(([, d]) => d);
-  if (arriscado.length)
-    return {
-      pergunta,
-      banda: "arriscado",
-      confie: "parcial",
-      sinais_detectados: [...new Set(arriscado)],
-      recomendacao: FRAMEWORK_CONFIANCA.arriscado.rotulo,
-    };
-  return {
-    pergunta,
-    banda: "inferivel",
-    confie: true,
-    sinais_detectados: [],
-    recomendacao: FRAMEWORK_CONFIANCA.inferivel.rotulo,
-    nota: "Nenhum sinal de estado-vivido detectado. Ainda assim, se a pergunta depende de experiência real (ex.: objeção que nasce de um dano vivido), trate como caso de borda e valide com humanos.",
-  };
-}
+// A pergunta do usuário NUNCA é enviada ao servidor: o host (Claude) a classifica no próprio
+// contexto usando esta rubrica antes de rodar a pesquisa (ver ferramenta avaliar_pergunta).
+const RUBRICA_FRONTEIRA = {
+  instrucao:
+    "Classifique a PERGUNTA do usuário aqui, no seu próprio contexto — não a envie ao servidor. Decida a banda e aja: 'inferivel' → pode rodar; 'arriscado' → rode, mas marque para validação humana; 'humano' → NÃO rode, explique que exige estado vivido e peça pesquisa com gente real. Na dúvida entre inferivel e humano, trate como humano.",
+  bandas: {
+    inferivel: { rode: true, o_que_e: FRAMEWORK_CONFIANCA.inferivel.rotulo, exemplos: FRAMEWORK_CONFIANCA.inferivel.exemplos },
+    arriscado: { rode: "com ressalva", o_que_e: FRAMEWORK_CONFIANCA.arriscado.rotulo, exemplos: FRAMEWORK_CONFIANCA.arriscado.exemplos },
+    humano: { rode: false, o_que_e: FRAMEWORK_CONFIANCA.humano.rotulo, exemplos: FRAMEWORK_CONFIANCA.humano.exemplos },
+  },
+};
 
 // ---------- Servidor MCP ----------
 export class PainelMCP extends McpAgent {
@@ -213,7 +183,7 @@ export class PainelMCP extends McpAgent {
     { name: "painel-sintetico-concorde", version: "1.0.0" },
     {
       instructions:
-        "Como usar bem este painel. (1) Use as ferramentas diretamente. Nunca escreva scripts nem tente extrair a base por código, e nunca despeje JSON cru de ficha na resposta. (2) Trabalhe com amostras pequenas: no máximo 5 personas por pedido, a menos que o usuário peça explicitamente mais. (3) Chame visao_geral primeiro; antes de confiar numa resposta, classifique a pergunta com avaliar_pergunta e respeite a fronteira ('humano' não se pergunta a persona sintética). (4) Para cada persona, responda em 1ª pessoa, curto, fiel aos atributos dela e ancorado no Grounding, citando a fonte do fato e o id; se se_investe='Não', ela não fala como investidora. (5) Não peça confirmação no meio: entregue o focus group, o resumo e a classificação de confiança de uma vez. (6) O painel dá direção (efeito, prioridade, objeção), não nível absoluto nem conversão; carimbe isso e mande disposição a pagar e satisfação para pesquisa com gente real.",
+        "Como usar bem este painel. Há dois modos: FOCUS GROUP (exploração qualitativa: filtrar_personas/sortear_amostra + get_personas, você dá voz às personas) e PESQUISA (medição direcional: preparar_pesquisa faz fan-out ISOLADO — uma tarefa/subagente por persona, sem contaminação — e você agrega localmente; é daqui que vêm os números dos backtests). (1) Use as ferramentas diretamente. Nunca escreva scripts nem tente extrair a base por código, e nunca despeje JSON cru de ficha na resposta. (2) No focus group, trabalhe com amostras pequenas (até 5 personas) salvo pedido explícito; a pesquisa (preparar_pesquisa) pode usar mais porque cada persona roda isolada. (3) Chame visao_geral primeiro; classifique a pergunta do usuário LOCALMENTE pela rubrica de avaliar_pergunta (a pergunta não é enviada ao servidor) e respeite a fronteira ('humano' não se pergunta a persona sintética). (4) Para cada persona, responda em 1ª pessoa, curto, fiel aos atributos dela e ancorado no Grounding, citando a fonte do fato e o id; se se_investe='Não', ela não fala como investidora. (5) Não peça confirmação no meio: entregue o resultado, o resumo e a classificação de confiança de uma vez. (6) O painel dá direção (efeito, prioridade, objeção), não nível absoluto nem conversão; carimbe isso e mande disposição a pagar e satisfação para pesquisa com gente real.",
     },
   );
 
@@ -243,7 +213,7 @@ export class PainelMCP extends McpAgent {
           descricao:
             "O Painel Sintético Concorde é um painel de 787 personas sintéticas do consumidor bancário brasileiro, calibrado com dados públicos (IBGE, Bacen, ABEP), com erro médio de 3,0 p.p. contra pesquisa real em perguntas de atitude — site: https://painel.concorde-painel.workers.dev. Cada persona tem ~27 atributos, uma seção de Grounding (fatos estatísticos que se aplicam ao seu segmento, com fonte) e uma História em prosa. Bancos de referência: 105 fatos estatísticos com filtro determinístico, 17 vozes verbatim reais por tema, 12 instituições financeiras (24 fichas: dados gerais e opinião de apps) e tabelas de distribuição.",
           como_usar:
-            "1) filtrar_personas ou sortear_amostra para montar um recorte; 2) get_personas para as fichas completas (use o Grounding para ancorar respostas em dados reais); 3) buscar_fatos/listar_vozes/get_instituicao para contexto adicional. Filtros usam a DSL: \"campo OP valor & campo OP valor\" com OP em == != > < >= <= in entre; listas como ['Classe A'; 'Classe B'].",
+            "Dois modos. (A) FOCUS GROUP / exploração: 1) filtrar_personas ou sortear_amostra para montar um recorte; 2) get_personas para as fichas completas (use o Grounding para ancorar respostas em dados reais); 3) buscar_fatos/listar_vozes/get_instituicao para contexto adicional. (B) PESQUISA / medição direcional: preparar_pesquisa faz fan-out isolado por persona (uma tarefa/subagente por persona, sem convergência) e devolve distribuição/notas — é daqui que saem os números dos backtests. Filtros usam a DSL: \"campo OP valor & campo OP valor\" com OP em == != > < >= <= in entre; listas como ['Classe A'; 'Classe B'].",
           atencao_tipos_de_percentual: {
             propensao: "P(métrica | público) — use direto na persona",
             prevalencia: "taxa base populacional — vale para todas",
@@ -251,7 +221,7 @@ export class PainelMCP extends McpAgent {
             referencia: "valor comparativo, não é proporção de pessoas",
           },
           fronteira_de_confianca:
-            "Este painel é uma triagem de discovery pré-campo, não um substituto de pesquisa. Antes de confiar numa resposta, classifique a PERGUNTA (use a ferramenta avaliar_pergunta): 'inferivel' = seguro para pressão direcional de conceito (prioridade, objeção, atrito de onboarding, compreensão, linguagem, tradeoff); 'humano' = exige estado vivido e NÃO deve ser perguntado a persona sintética (satisfação, incidência/vitimização, dano, comportamento passado real, intensidade emocional, confiança após experiência). Não confunda preferência inferida com realidade vivida. O valor do painel é saber o que perguntar a gente de verdade antes de gastar com campo.",
+            "Este painel é uma triagem de discovery pré-campo, não um substituto de pesquisa. Antes de confiar numa resposta, classifique a PERGUNTA você mesmo, LOCALMENTE (a ferramenta avaliar_pergunta devolve a rubrica; a pergunta do usuário não é enviada ao servidor): 'inferivel' = seguro para pressão direcional de conceito (prioridade, objeção, atrito de onboarding, compreensão, linguagem, tradeoff); 'humano' = exige estado vivido e NÃO deve ser perguntado a persona sintética (satisfação, incidência/vitimização, dano, comportamento passado real, intensidade emocional, confiança após experiência). Não confunda preferência inferida com realidade vivida. O valor do painel é saber o que perguntar a gente de verdade antes de gastar com campo.",
           termos_de_uso:
             "Serviço gratuito de consulta (prova de conceito, projeto Concorde). Os dados do painel são propriedade do autor; uso para consultas e simulações é livre, extração em massa ou redistribuição da base não é autorizada. Há cotas por IP (rajada e diária).",
           contagens: { personas: personas.length, fatos: fatos.length, vozes: vozes.length, instituicoes: instituicoes.length },
@@ -263,9 +233,9 @@ export class PainelMCP extends McpAgent {
 
     this.server.tool(
       "avaliar_pergunta",
-      "Fronteira de confiança: classifica uma pergunta de pesquisa em 'inferivel' (seguro para persona sintética — direcional), 'arriscado' (validar) ou 'humano' (exige estado vivido, NÃO pergunte a persona sintética). Use antes de rodar um focus group para separar o que o painel pode responder do que precisa de gente real. Triagem heurística determinística; casos de borda devem ir para validação humana.",
-      { pergunta: z.string().describe("A pergunta de pesquisa a classificar. Ex.: 'quão satisfeito você está com seu banco?'") },
-      async ({ pergunta }) => ok(avaliarPergunta(pergunta)),
+      "Fronteira de confiança (classificação LOCAL, preserva privacidade). NÃO recebe a pergunta: devolve a RUBRICA para VOCÊ (assistente) classificar a pergunta do usuário no seu próprio contexto, sem enviá-la ao servidor. Bandas: 'inferivel' (pode rodar), 'arriscado' (rode com ressalva), 'humano' (NÃO pergunte a persona sintética — exige estado vivido). Aplique antes de preparar_pesquisa.",
+      {},
+      async () => ok(RUBRICA_FRONTEIRA),
     );
 
     this.server.tool(
@@ -311,6 +281,88 @@ export class PainelMCP extends McpAgent {
         }
         const amostra = pool.slice(0, n);
         return this.nudge(ok({ filtro: filtro ?? "todos", pool: pool.length, seed: seedUsada, amostra: amostra.map(mini) }));
+      }
+    );
+
+    this.server.tool(
+      "preparar_pesquisa",
+      "Prepara uma pesquisa de fan-out ISOLADO por persona (mede sem convergência). A PERGUNTA do usuário NÃO é enviada ao servidor (privacidade): você a classifica localmente pela 'fronteira' e a injeta você mesmo em cada pacote. Sorteia N personas e devolve UM pacote por persona (ficha + formato de resposta) + o protocolo para o HOST disparar UMA tarefa/subagente isolado por pacote — cada um responde só a SUA persona, sem ver as outras. A agregação é feita LOCALMENTE; o servidor não recebe nem armazena nenhuma resposta. Formatos: 'escolha' (opção única → distribuição), 'pontuar' (nota 0-10 por atributo → média+desvio por opção, recomendado para 'o que importa mais' e mais robusto a colapso), 'escala' e 'aberta'. Pode filtrar o segmento (classe, idade, região, etc.) pela DSL.",
+      {
+        formato: z.enum(["escolha", "pontuar", "escala", "aberta"]).default("escolha").describe("escolha=opção única fechada (gera distribuição, mas pode colapsar em amostra enviesada); pontuar=cada persona dá nota 0-10 a CADA opção (gera média+desvio por opção, preserva a preferência secundária — recomendado para 'o que importa mais'); escala=uma nota numérica; aberta=sem número, só temas/verbatim."),
+        opcoes: z.array(z.string()).optional().describe("Opções fechadas quando formato='escolha' ou 'pontuar'. Ex.: ['Versão A'; 'Versão B']"),
+        escala_min: z.number().int().optional().describe("Mínimo da escala quando formato='escala' (ex.: 1)."),
+        escala_max: z.number().int().optional().describe("Máximo da escala quando formato='escala' (ex.: 5)."),
+        filtro: z.string().optional().describe("Filtro DSL do segmento — recorta por classe, idade, região, banco, dívida, etc. Ex.: \"classe_social in ['Classe A'; 'Classe B'] & idade > 30 & se_investe == 'Sim'\". Vazio = população toda."),
+        n: z.number().int().min(1).max(30).default(12).describe("Quantas personas sortear (teto 30, para proteger a base e o custo de tokens do host)."),
+        seed: z.number().int().optional().describe("Opcional. Por padrão o sorteio é ALEATÓRIO e o seed usado é devolvido no resultado — salve-o para reproduzir a MESMA amostra depois. Passe um número só se quiser repetir uma amostra específica."),
+      },
+      async ({ formato, opcoes, escala_min, escala_max, filtro, n, seed }) => {
+        if ((formato === "escolha" || formato === "pontuar") && (!opcoes || opcoes.length < 2))
+          return ok({ erro: `formato='${formato}' exige 'opcoes' com pelo menos 2 alternativas.`, exemplo: "opcoes: ['Versão A'; 'Versão B']" });
+        if (formato === "escala" && (escala_min === undefined || escala_max === undefined || escala_max <= escala_min))
+          return ok({ erro: "formato='escala' exige escala_min e escala_max (com max > min). Ex.: escala_min=1, escala_max=5." });
+
+        let pool: Persona[];
+        try {
+          pool = [...filtrar(filtro)];
+        } catch (e: any) {
+          return ok({ erro: e.message, dica: "Ex.: classe_social == 'Classe A' & se_investe == 'Sim'" });
+        }
+        if (!pool.length) return ok({ erro: "Nenhuma persona nesse filtro.", filtro: filtro ?? "todos" });
+
+        // Seed aleatório por padrão; devolvido no resultado para o usuário salvar e reproduzir.
+        const seedUsada = seed ?? Math.floor(Math.random() * 1e9);
+        let s = (seedUsada >>> 0) || 1;
+        const rand = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; };
+        for (let i = pool.length - 1; i > 0; i--) {
+          const j = Math.floor(rand() * (i + 1));
+          [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+        const amostra = pool.slice(0, Math.min(n, pool.length));
+
+        const schema_resposta =
+          formato === "escolha"
+            ? { persona_id: "string", escolha: `uma EXATA de ${JSON.stringify(opcoes)}`, intensidade_1a5: "inteiro 1-5 (quão forte)", verbatim: "1 frase em 1ª pessoa, fiel à ficha", fontes: "ids/fontes do Grounding que embasam" }
+            : formato === "pontuar"
+              ? { persona_id: "string", notas: Object.fromEntries((opcoes ?? []).map((o) => [o, "inteiro 0-10 (0=irrelevante para mim, 10=essencial)"])), verbatim: "1 frase em 1ª pessoa justificando a maior nota", fontes: "ids/fontes do Grounding" }
+              : formato === "escala"
+                ? { persona_id: "string", nota: `inteiro entre ${escala_min} e ${escala_max}`, verbatim: "1 frase em 1ª pessoa", fontes: "ids/fontes do Grounding" }
+                : { persona_id: "string", tema: "rótulo curto da reação", verbatim: "1-2 frases em 1ª pessoa", fontes: "ids/fontes do Grounding" };
+
+        return this.nudge(ok({
+          status: "pronto",
+          formato,
+          ...(formato === "escolha" || formato === "pontuar" ? { opcoes } : {}),
+          ...(formato === "escala" ? { escala: { min: escala_min, max: escala_max } } : {}),
+          ...(formato === "escolha" ? { nota_fronteira: "Escolha única entre atributos afetivos pode saturar numa opção só quando a amostra é enviesada (ex.: personas com grounding de fraude tendem todas a 'segurança'). Se a dispersão vier ~0, rode de novo com formato='pontuar' (nota 0-10 por atributo, preserva a preferência secundária) ou aumente n." } : {}),
+          segmento: { filtro: filtro ?? "todos", pool: pool.length, n: amostra.length, seed: seedUsada, ids: amostra.map((p) => p.id) },
+          reproduzir: { seed: seedUsada, como: `Para repetir EXATAMENTE esta amostra depois, chame de novo com o mesmo filtro e seed=${seedUsada} (mesma versão da base). Salve este seed.` },
+          fronteira: RUBRICA_FRONTEIRA,
+          carimbo_confianca:
+            "O painel dá DIREÇÃO (distribuição de preferência/prioridade/objeção), não nível absoluto, disposição a pagar nem conversão. Mande esses para pesquisa com gente real.",
+          protocolo_fan_out: [
+            "0) FRONTEIRA (local): classifique a pergunta do usuário pela 'fronteira' abaixo, no seu próprio contexto. Se cair em 'humano', NÃO rode: explique e peça pesquisa com gente real. A pergunta não foi enviada ao servidor.",
+            "1) Para CADA pacote abaixo, dispare UMA tarefa/subagente ISOLADO e INJETE a pergunta do usuário nele (o servidor não a tem). Cada subagente recebe só o seu pacote + a pergunta e responde só a sua persona.",
+            "2) NÃO responda os pacotes no mesmo contexto, um após o outro: isso faz as personas convergirem e falseia a distribuição. Se o host NÃO tiver subagentes (ex.: Claude Desktop), avise que sem isolamento real o resultado é só indicativo, e responda cada pacote em bloco independente, sem olhar os anteriores.",
+            "3) Cada subagente responde ESTRITAMENTE no formato_resposta (JSON), em 1ª pessoa, fiel aos atributos e ancorado no Grounding, citando as fontes. Se se_investe='Não', a persona não fala como investidora.",
+            "4) Agregue LOCALMENTE e de forma determinística, CONTANDO as respostas (não estime). 'escolha': distribuição = contagem por opção ÷ N. 'pontuar': por opção, média e desvio-padrão das notas, ranqueado por média. 'escala': média e desvio-padrão. (Agregue as RESPOSTAS; não use código para ler ou extrair a base do painel.)",
+            "5) Reporte também a DISPERSÃO (desvio-padrão / entropia): é ela que mostra que não houve colapso para a média.",
+            "6) Apresente distribuição + dispersão + 5 a 8 verbatims com fonte + o carimbo de confiança + o seed (para reproduzir). Nada disso volta ao servidor.",
+          ],
+          schema_resposta,
+          privacidade:
+            "O servidor recebe apenas o filtro de segmento, o número de personas e o formato. Ele NÃO recebe a pergunta do usuário, as respostas das personas nem o resultado agregado — tudo isso roda no host. Reprodutibilidade = filtro + seed + versão da base.",
+          pacotes: amostra.map((p) => ({
+            persona_id: p.id,
+            instrucao:
+              "Você É a persona da ficha abaixo. O host vai te entregar a PERGUNTA do usuário (ela não veio do servidor, por privacidade). Responda em 1ª pessoa, curto, fiel aos atributos e ancorado no Grounding (cite as fontes por id). Se se_investe='Não', não fale como investidora. Responda ESTRITAMENTE no 'formato_resposta' (JSON). Não veja, não suponha e não cite outras personas.",
+            formato,
+            ...(formato === "escolha" || formato === "pontuar" ? { opcoes } : {}),
+            ...(formato === "escala" ? { escala: { min: escala_min, max: escala_max } } : {}),
+            formato_resposta: schema_resposta,
+            ficha: fichaCompleta(p),
+          })),
+        }));
       }
     );
 
@@ -449,6 +501,9 @@ async function verificaCota(corpo: string, request: Request, env: any): Promise<
     if (c.params?.name === "get_personas")
       consumo.personas_dia =
         (consumo.personas_dia ?? 0) + (Array.isArray(c.params?.arguments?.ids) ? c.params.arguments.ids.length : 10);
+    // preparar_pesquisa serve N fichas completas (uma por pacote) — conta na mesma cota de base
+    if (c.params?.name === "preparar_pesquisa")
+      consumo.personas_dia = (consumo.personas_dia ?? 0) + (Number(c.params?.arguments?.n) || 12);
   }
   const ip = request.headers.get("cf-connecting-ip") ?? "desconhecido";
   const estourado = await env.QUOTA.get(env.QUOTA.idFromName(ip)).take(consumo);

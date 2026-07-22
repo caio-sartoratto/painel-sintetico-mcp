@@ -452,6 +452,10 @@ Os modelos crus responderam direto, sem painel e sem busca. O painel erra
 </div>
 <p>Três backtests contra pesquisas reais publicadas. Em cada um, 100 personas sorteadas do painel,
 classificadas com temperatura 0 (reproduzível), comparadas ao benchmark equivalente.</p>
+<p class="dim">Esses números saem do <b>mesmo mecanismo que você pode rodar</b>: a ferramenta
+<code>preparar_pesquisa</code> faz um <b>fan-out isolado</b> — uma persona por vez, sem uma influenciar
+a outra — e a distribuição é contada no seu próprio Claude, com um <code>seed</code> para reproduzir.
+<a href="/usar#pesquisa">→ veja como rodar uma pesquisa você mesmo</a></p>
 <h3>Backtest 1: idwall 2025 (atitude sobre banco digital)</h3>
 <p>Estudo idwall de Experiência Digital 2025, amostra nacional ponderada por IBGE.</p>
 <div class="tabela-scroll"><table>
@@ -534,11 +538,12 @@ honesta é ele saber onde confiar e onde não. A régua é o tipo de pergunta:</
   <div class="card"><b style="color:var(--verde)">Inferível ✓</b><span>a resposta se infere do contexto de segmento: prioridades, objeções prováveis, atrito de onboarding, compreensão de conceito, linguagem que cola ou não, tradeoffs. <b>Seguro para pressão direcional.</b></span></div>
   <div class="card"><b style="color:var(--ambar)">Só-humano ✗</b><span>a resposta exige estado vivido: satisfação, incidência (já foi vítima?), dano, comportamento passado real, intensidade emocional, confiança depois de uma experiência. <b>Não pergunte a uma persona sintética.</b></span></div>
 </div>
-<p>Por isso o painel tem uma ferramenta de <b>triagem</b>: antes de rodar o focus group, ela
-classifica cada pergunta em inferível, arriscado ou só-humano, e transforma seus pontos cegos no
-roteiro da pesquisa que você vai levar para pessoas reais. É o que os três backtests acima mostram na
-prática: o painel acerta em atitude e intenção, e erra onde a resposta pedia experiência vivida.</p>
-<p class="link-bloco"><a href="/usar">→ como usar a triagem e rodar um focus group</a></p>
+<p>Por isso o painel tem uma <b>triagem</b>: antes de rodar, a pergunta é classificada em inferível,
+arriscado ou só-humano — e essa classificação acontece <b>localmente, no seu Claude</b> (a pergunta
+não trafega pelo servidor), transformando seus pontos cegos no roteiro da pesquisa que você vai levar
+para pessoas reais. É o que os três backtests acima mostram na prática: o painel acerta em atitude e
+intenção, e erra onde a resposta pedia experiência vivida.</p>
+<p class="link-bloco"><a href="/usar">→ como rodar: focus group e pesquisa direcional</a></p>
 <p class="link-bloco"><a href="/porque">→ quem faz isso e por que se chama concorde</a></p>
 
 <h2>o teto dos dados públicos — e o que viria depois</h2>
@@ -721,7 +726,9 @@ const USAR = layout(
 <p class="zsh"><b>concorde@painel</b> ~ % <i>painel --usar</i></p>
 <h1 style="margin-top:8px">Como usar<span class="cursor"></span></h1>
 <p class="sub">Você não chama ferramentas — você conversa. O Claude decide quando consultar o
-painel. Estes padrões tiram o máximo dele no discovery.</p>
+painel. Há dois modos: <a href="#focus-group"><b>focus group</b></a> (exploração qualitativa, ouvir
+objeções) e <a href="#pesquisa"><b>pesquisa direcional</b></a> (medição com fan-out isolado por
+persona). Estes padrões tiram o máximo dos dois.</p>
 
 <h2>primeira vez? rode isto</h2>
 <p>Prompt calibrado para a melhor primeira impressão: troque só o trecho entre
@@ -733,9 +740,10 @@ real com fonte, e uma síntese com as objeções que você levaria meses para ou
 O seed 7 torna a amostra reprodutível: rode de novo amanhã e compare.</p>
 
 <h2>a triagem: o que perguntar antes de gastar</h2>
-<p>Antes de rodar o focus group, passe suas perguntas pela fronteira de confiança. A ferramenta
-separa o que a persona sintética pode responder (direcional) do que exige gente de verdade
-(estado vivido), e o que sobra vira o roteiro da sua pesquisa de campo.</p>
+<p>Antes de rodar, passe suas perguntas pela fronteira de confiança. A classificação acontece
+<b>no seu próprio Claude</b> — a pergunta não é enviada ao servidor: o painel só devolve a rubrica, e
+o Claude separa o que a persona sintética pode responder (direcional) do que exige gente de verdade
+(estado vivido). O que sobra vira o roteiro da sua pesquisa de campo.</p>
 ${promptCopiavel(
   "claude — conversa",
   `Antes de eu rodar um focus group, avalie estas perguntas pela fronteira
@@ -750,7 +758,9 @@ pesquisa com humanos:
 3 saem como "só-humano" (leve para pesquisa real). Aí você roda o focus group só com o que é
 seguro, e já sai com o roteiro do que validar em campo.</p>
 
-<h2>depois, os padrões do dia a dia</h2>
+<h2 id="focus-group">modo 1 — focus group (explorar e ouvir)</h2>
+<p>Sorteie um recorte e dê voz às personas: entrevista, teste de mensagem, checagem de dado.
+Qualitativo, para <b>ouvir objeções e afiar hipóteses</b> antes de medir.</p>
 
 <h3>recorte + entrevista</h3>
 ${promptCopiavel(
@@ -785,6 +795,29 @@ que as personas do meu recorte diriam. Marque o que é voz real e o que
 é persona sintética.`
 )}
 
+<h2 id="pesquisa">modo 2 — pesquisa direcional (medir sem convergência)</h2>
+<p>Quando você quer um <b>número</b> (distribuição de preferência, prioridade, ranking de atributos),
+use <code>preparar_pesquisa</code>. Ela sorteia as personas e o Claude dispara <b>uma tarefa isolada
+por persona</b> — cada uma responde sem ver as outras, o que evita a convergência artificial que
+aparece quando várias personas falam no mesmo contexto. A agregação é contada localmente.
+<b>É assim que os backtests da home foram feitos.</b></p>
+<p>Funciona melhor num host com subagentes (Claude Code e afins). No Claude Desktop roda, mas sem
+isolamento real — vale como indicativo.</p>
+${promptCopiavel(
+  "claude — pesquisa",
+  `Use preparar_pesquisa com o painel: formato "pontuar",
+opcoes ["Sem tarifa","App bom","Atendimento humano","Segurança"],
+filtro Classe A e B que investem, n 20.
+Dispare uma tarefa isolada por persona (cada uma dá nota 0-10 por opção),
+depois me traga a média e o desvio de cada opção, ranqueado, com verbatims
+— e o seed usado, pra eu reproduzir.`
+)}
+<p class="dim"><b>Formatos:</b> <code>escolha</code> (opção única → distribuição), <code>pontuar</code>
+(nota 0-10 por atributo → média+desvio por opção, preserva a preferência secundária e resiste a
+colapso), <code>escala</code> e <code>aberta</code>. O <code>seed</code> é aleatório por padrão e
+devolvido no resultado: salve-o para repetir a mesma amostra. Privacidade: a pergunta e as respostas
+ficam no seu Claude — só o filtro de segmento chega ao servidor.</p>
+
 <h2>boas práticas</h2>
 <ul>
 <li>Trabalhe com <b>amostras</b> (6–12 personas), não com o painel inteiro — é assim que pesquisa qualitativa funciona, e é o que as cotas incentivam.</li>
@@ -797,9 +830,10 @@ que as personas do meu recorte diriam. Marque o que é voz real e o que
 <h2>ferramentas disponíveis (para os curiosos)</h2>
 <div class="grade">
 <div class="card"><b>visao_geral</b><span>o que existe, campos filtráveis, tipos de percentual</span></div>
-<div class="card"><b>avaliar_pergunta</b><span>fronteira de confiança: inferível, arriscado ou só-humano</span></div>
+<div class="card"><b>avaliar_pergunta</b><span>rubrica da fronteira para você classificar localmente (a pergunta não vai ao servidor)</span></div>
 <div class="card"><b>filtrar_personas</b><span>recorte exato por qualquer atributo</span></div>
 <div class="card"><b>sortear_amostra</b><span>amostra aleatória reprodutível (seed)</span></div>
+<div class="card"><b>preparar_pesquisa</b><span>pesquisa por fan-out isolado: distribuição, notas e dispersão (seed reproduzível)</span></div>
 <div class="card"><b>get_personas</b><span>fichas completas: atributos + grounding + história</span></div>
 <div class="card"><b>buscar_fatos</b><span>por texto, eixo ou persona</span></div>
 <div class="card"><b>listar_vozes</b><span>verbatim reais por tema</span></div>
@@ -838,8 +872,12 @@ ${term(
    filtros estruturados       <span class="r">"classe_social == 'Classe C'"</span>
    ids de personas pedidas    <span class="r">get_personas(['PERS_023'])</span>
    termos de busca de fatos   <span class="r">buscar_fatos("pix golpes")</span>
-   a pergunta que você avalia  <span class="r">avaliar_pergunta("quão satisfeito...")</span>`
+   segmento de uma pesquisa   <span class="r">preparar_pesquisa(filtro, n, formato)</span>`
 )}
+
+<p class="dim">A triagem de fronteira e a pergunta de uma pesquisa (<code>preparar_pesquisa</code>) são
+avaliadas no seu próprio Claude: a pergunta em si nunca é enviada ao servidor — só o filtro de
+segmento, o número de personas e o formato.</p>
 
 <h2>o que eu consigo saber, no máximo</h2>
 <p>Os argumentos acima são processados na hora e descartados. O que o servidor <b>guarda</b> é só
@@ -1090,9 +1128,13 @@ brasileiro (4 classes sociais x 6 faixas etárias, ~27 atributos por persona), c
 dados públicos do IBGE, Bacen e ABEP. Cada persona é ligada por filtro determinístico a 105
 fatos estatísticos com fonte, 17 vozes verbatim reais e fichas de 12 instituições financeiras.
 Validação: erro médio de 3,0 pontos percentuais contra o Estudo idwall 2025 em perguntas de
-atitude do consumidor. Uso: triagem de discovery pré-campo para produtos bank/fintech (focus
+atitude do consumidor. Dois modos de uso: FOCUS GROUP (exploração qualitativa) e PESQUISA
+(medição direcional pela ferramenta preparar_pesquisa, que faz fan-out isolado por persona — uma
+tarefa por persona, sem convergência — e devolve distribuição/notas com dispersão; é o mecanismo
+dos backtests). Uso: triagem de discovery pré-campo para produtos bank/fintech (focus
 groups sintéticos, teste de conceito e de mensagem). Tem uma fronteira de confiança explícita
-(ferramenta avaliar_pergunta): é confiável para perguntas inferíveis do contexto de segmento
+(classificada localmente no Claude, a rubrica vem da ferramenta avaliar_pergunta; a pergunta do
+usuário não trafega pelo servidor): é confiável para perguntas inferíveis do contexto de segmento
 (prioridades, objeções, atrito de onboarding, compreensão, linguagem, tradeoffs) e sinaliza como
 "só-humano" as que exigem estado vivido (satisfação, incidência/vitimização, dano, comportamento
 passado real, intensidade emocional). Não substitui pesquisa primária nem teste A/B: o valor é
@@ -1108,7 +1150,7 @@ Autor: Caio Sartoratto Prado (projeto concorde).
 - [Home](${BASE_URL}/): o que é, demo, validação (backtest idwall), arquitetura e referências acadêmicas
 - [O que é persona sintética?](${BASE_URL}/persona-sintetica): guia com definição, papers e FAQ
 - [Instalar](${BASE_URL}/instalar): passo a passo do conector MCP no Claude
-- [Como usar](${BASE_URL}/usar): prompts prontos para focus group sintético
+- [Como usar](${BASE_URL}/usar): prompts prontos — focus group (qualitativo) e pesquisa direcional (preparar_pesquisa)
 - [Privacidade](${BASE_URL}/privacidade): conversas rodam no Claude do usuário, nunca no servidor
 - [Porquê](${BASE_URL}/porque): autor e origem do nome
 `,
