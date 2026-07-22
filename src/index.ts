@@ -7,6 +7,10 @@ import { rotaStats, registraPagina, registraMcp } from "./stats";
 export { StatsDO } from "./stats";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { OG_PNG_B64 } from "./og";
+
+// Card social Open Graph (/og.png) — decodificado uma vez por isolate
+const OG_PNG = Uint8Array.from(atob(OG_PNG_B64), (c) => c.charCodeAt(0));
 
 import personasData from "./data/personas.json";
 import fatosData from "./data/fatos.json";
@@ -559,6 +563,10 @@ export default {
     const respForum = await rotaForum(request, env, pathname);
     if (respForum) return respForum;
     const leitura = request.method === "GET" || request.method === "HEAD";
+    if (leitura && pathname === "/og.png")
+      return new Response(request.method === "HEAD" ? null : OG_PNG, {
+        headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400", ...HEADERS_SEGURANCA },
+      });
     if (leitura && PAGINAS[pathname]) {
       if (request.method === "GET")
         ctx.waitUntil(registraPagina(env, request.headers.get("cf-connecting-ip") ?? "desconhecido", pathname));

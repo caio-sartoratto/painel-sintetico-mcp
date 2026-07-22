@@ -167,9 +167,15 @@ function layout(
 <meta property="og:url" content="${BASE_URL}${caminho}">
 <meta property="og:site_name" content="painel sintético concorde">
 <meta property="og:locale" content="pt_BR">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="${BASE_URL}/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:alt" content="Painel Sintético Concorde — 787 personas do consumidor bancário brasileiro, erro médio 3,3pp vs pesquisa real">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${titulo}">
 <meta name="twitter:description" content="${desc}">
+<meta name="twitter:image" content="${BASE_URL}/og.png">
 ${jsonld ? `<script type="application/ld+json">${jsonld}</script>` : ""}
 ${headExtra}
 <style>${ESTILO}</style>
@@ -358,14 +364,37 @@ document.querySelectorAll('.copiar').forEach(el=>{
 
 const JSONLD_APP = JSON.stringify({
   "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: "painel sintético concorde",
-  applicationCategory: "BusinessApplication",
-  operatingSystem: "Web (conector MCP para Claude)",
-  description: DESC_PADRAO,
-  url: BASE_URL,
-  offers: { "@type": "Offer", price: "0", priceCurrency: "BRL" },
-  author: { "@type": "Person", name: "Caio Sartoratto Prado", url: "https://www.linkedin.com/in/caio-sartoratto-prado-078307178/" },
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      name: "painel sintético concorde",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web (conector MCP para Claude)",
+      description: DESC_PADRAO,
+      url: BASE_URL,
+      image: `${BASE_URL}/og.png`,
+      inLanguage: "pt-BR",
+      featureList: [
+        "787 personas sintéticas do consumidor bancário brasileiro",
+        "Calibrado com dados públicos do IBGE, Bacen e ABEP",
+        "Focus group sintético e pesquisa direcional (fan-out isolado por persona)",
+        "Fronteira de confiança: separa o que a persona pode responder do que exige gente real",
+        "Erro médio de 3,3 pp contra pesquisa real em perguntas de atitude",
+      ],
+      offers: { "@type": "Offer", price: "0", priceCurrency: "BRL" },
+      author: { "@type": "Person", name: "Caio Sartoratto Prado", url: "https://www.linkedin.com/in/caio-sartoratto-prado-078307178/" },
+    },
+    {
+      "@type": "Dataset",
+      name: "Painel Sintético Concorde — 787 personas do consumidor bancário brasileiro",
+      description:
+        "787 personas sintéticas (4 classes sociais x 6 faixas etárias, ~27 atributos por persona), calibradas com dados públicos do IBGE, Bacen e ABEP, ligadas por filtro determinístico a 105 fatos estatísticos com fonte.",
+      url: BASE_URL,
+      inLanguage: "pt-BR",
+      creator: { "@type": "Person", name: "Caio Sartoratto Prado" },
+      keywords: ["persona sintética", "pesquisa sintética", "dados sintéticos", "consumidor bancário", "fintech", "discovery de produto", "pesquisa de mercado com IA"],
+    },
+  ],
 });
 
 const HOME = layout(
