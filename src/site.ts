@@ -9,7 +9,7 @@ const DESC_PADRAO =
 const ESTILO = `
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
 :root{
-  --bg:#000000;--janela:#1c1c1e;--titulo:#242426;--borda:#3a3a3c;--texto:#f2f2f2;--dim:#8e8e93;
+  color-scheme:dark;--bg:#000000;--janela:#1c1c1e;--titulo:#242426;--borda:#3a3a3c;--texto:#f2f2f2;--dim:#8e8e93;
   --roxo:#5aa6ff;--azul:#bf9ffb;--verde:#27c93f;--ambar:#ffbd2e;--vermelho:#ff5f56; /* primária azul(--roxo) · secundária verde · terciária roxo(--azul) */
 }
 ::selection{background:rgba(90,166,255,.32);color:#fafafa}
@@ -71,7 +71,7 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .ok{color:var(--verde)}
 .ruim{color:var(--vermelho)}
 .destaque{background:var(--janela);border:1px solid var(--borda);border-left:3px solid var(--roxo);border-radius:0 10px 10px 0;padding:14px 18px;margin:18px 0}
-.passo{display:flex;gap:14px;margin:22px 0}
+.passo{display:flex;gap:14px;margin:22px 0}.passo>div{min-width:0}
 .passo .n{color:var(--roxo);white-space:nowrap}
 footer{border-top:1px solid var(--borda);padding:26px 0 40px;color:var(--dim);font-size:.86em}
 footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
@@ -105,7 +105,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
 .chip.on{opacity:1;transform:none;color:var(--verde);border-color:#2b4a34}
 .link-bloco{margin:14px 0 0;font-size:.9em}
 /* --- fórum --- */
-input[type=text],textarea{width:100%;background:var(--janela);border:1px solid var(--borda);border-radius:8px;
+input[type=text],textarea{width:100%;background:var(--janela);border:1px solid var(--borda);border-radius:8px;font-size:16px;
   color:var(--texto);font:inherit;padding:10px 12px;margin:6px 0}
 textarea{min-height:110px;resize:vertical}
 input:focus,textarea:focus{outline:none;border-color:var(--roxo)}
@@ -157,6 +157,7 @@ function layout(
   return `<!doctype html>
 <html lang="pt-BR"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#000000">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <title>${titulo}</title>
 <meta name="description" content="${desc}">
@@ -176,6 +177,7 @@ function layout(
 <meta name="twitter:title" content="${titulo}">
 <meta name="twitter:description" content="${desc}">
 <meta name="twitter:image" content="${BASE_URL}/og.png">
+<meta name="twitter:image:alt" content="Painel Sintético Concorde — 787 personas do consumidor bancário brasileiro">
 ${jsonld ? `<script type="application/ld+json">${jsonld}</script>` : ""}
 ${headExtra}
 <style>${ESTILO}</style>
@@ -457,7 +459,7 @@ ${janela(
 <p>O <b>painel sintético concorde</b> é um painel de <b>787 personas sintéticas</b> do
 consumidor bancário brasileiro, calibrado com dados públicos do IBGE, Bacen e ABEP, que
 responde perguntas de pesquisa em primeira pessoa dentro do Claude — com erro médio de
-3,0 pontos percentuais contra pesquisa de campo em perguntas de atitude do consumidor.
+3,3 pontos percentuais contra pesquisa de campo em perguntas de atitude do consumidor.
 <a href="/persona-sintetica">Entenda o que é uma persona sintética →</a></p>
 </div>
 
@@ -494,7 +496,7 @@ a outra — e a distribuição é contada no seu próprio Claude, com um <code>s
 <tr><td>A casa é o lugar mais seguro para acessar o banco</td><td class="num">68,5%</td><td class="num">74,0%</td><td class="num ok">5,5 pp</td></tr>
 </table></div>
 <p>Erro médio absoluto de <b>3,0 pp</b> nas perguntas de atitude e intenção. As três respostas
-ficam dentro de 6 pontos percentuais do benchmark, estatisticamente indistinguíveis dele.</p>
+ficam a poucos pontos percentuais do benchmark (todas dentro de 6 pp).</p>
 
 <h3>Backtest 2: Reclame AQUI 2026 (crise de solvência)</h3>
 <p>Pesquisa Reclame AQUI de março de 2026 (n=2.073), durante a crise de confiança em bancos
@@ -662,8 +664,8 @@ Você cola uma URL nas configurações do Claude e pronto.</p>
 </ul>
 <div class="destaque">
 <p><b>Aviso (jul/2026):</b> há uma instabilidade conhecida do claude.ai <b>no navegador</b> com
-conectores customizados — as ferramentas aparecem nas configurações mas podem não carregar na
-conversa. No <b>app Claude Desktop</b> funciona normalmente. Se o web falhar para você, use o
+conectores customizados — as ferramentas aparecem nas configurações, mas podem não carregar na
+conversa. No <b>app Claude Desktop</b> funciona normalmente. Se a versão no navegador falhar, use o
 Desktop enquanto a Anthropic corrige.</p>
 </div>
 
@@ -1108,7 +1110,7 @@ export function paginaForum(titulo: string, conteudo: string): string {
   );
 }
 
-const HOJE = new Date().toISOString().slice(0, 10);
+// lastmod removido do sitemap: new Date() no escopo de módulo do Worker retorna epoch 0 (1970).
 // Favicon: mini grafo de conhecimento (estilo Obsidian da home). Nó central azul (painel)
 // ligado a satélites verde (fato), roxo (voz) e cinza (dado).
 const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#000000"/><g stroke="#8e8e93" stroke-width="1.1" opacity=".55"><line x1="16" y1="16" x2="8" y2="8"/><line x1="16" y1="16" x2="25" y2="9"/><line x1="16" y1="16" x2="25" y2="24"/><line x1="16" y1="16" x2="8" y2="24"/></g><circle cx="8" cy="8" r="2.3" fill="#27c93f"/><circle cx="25" cy="9" r="2" fill="#bf9ffb"/><circle cx="25" cy="24" r="2.4" fill="#8e8e93"/><circle cx="8" cy="24" r="2" fill="#5aa6ff"/><circle cx="16" cy="16" r="3.9" fill="#5aa6ff"/></svg>`;
@@ -1118,7 +1120,7 @@ export const EXTRAS: Record<string, { corpo: string; tipo: string }> = {
     corpo: `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${Object.keys(PAGINAS)
-  .map((p) => `  <url><loc>${BASE_URL}${p === "/" ? "" : p}</loc><lastmod>${HOJE}</lastmod></url>`)
+  .map((p) => `  <url><loc>${BASE_URL}${p === "/" ? "/" : p}</loc></url>`)
   .join("\n")}
 </urlset>`,
   },

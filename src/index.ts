@@ -215,7 +215,7 @@ export class PainelMCP extends McpAgent {
       async () => {
         return ok({
           descricao:
-            "O Painel Sintético Concorde é um painel de 787 personas sintéticas do consumidor bancário brasileiro, calibrado com dados públicos (IBGE, Bacen, ABEP), com erro médio de 3,0 p.p. contra pesquisa real em perguntas de atitude — site: https://painel.concorde-painel.workers.dev. Cada persona tem ~27 atributos, uma seção de Grounding (fatos estatísticos que se aplicam ao seu segmento, com fonte) e uma História em prosa. Bancos de referência: 105 fatos estatísticos com filtro determinístico, 17 vozes verbatim reais por tema, 12 instituições financeiras (24 fichas: dados gerais e opinião de apps) e tabelas de distribuição.",
+            "O Painel Sintético Concorde é um painel de 787 personas sintéticas do consumidor bancário brasileiro, calibrado com dados públicos (IBGE, Bacen, ABEP), com erro médio de 3,3 p.p. contra pesquisa real em perguntas de atitude — site: https://painel.concorde-painel.workers.dev. Cada persona tem ~27 atributos, uma seção de Grounding (fatos estatísticos que se aplicam ao seu segmento, com fonte) e uma História em prosa. Bancos de referência: 105 fatos estatísticos com filtro determinístico, 17 vozes verbatim reais por tema, 12 instituições financeiras (24 fichas: dados gerais e opinião de apps) e tabelas de distribuição.",
           como_usar:
             "Dois modos. (A) FOCUS GROUP / exploração: 1) filtrar_personas ou sortear_amostra para montar um recorte; 2) get_personas para as fichas completas (use o Grounding para ancorar respostas em dados reais); 3) buscar_fatos/listar_vozes/get_instituicao para contexto adicional. (B) PESQUISA / medição direcional: preparar_pesquisa faz fan-out isolado por persona (uma tarefa/subagente por persona, sem convergência) e devolve distribuição/notas — é daqui que saem os números dos backtests. Filtros usam a DSL: \"campo OP valor & campo OP valor\" com OP em == != > < >= <= in entre; listas como ['Classe A'; 'Classe B'].",
           atencao_tipos_de_percentual: {
@@ -228,7 +228,7 @@ export class PainelMCP extends McpAgent {
             "Este painel é uma triagem de discovery pré-campo, não um substituto de pesquisa. Antes de confiar numa resposta, classifique a PERGUNTA você mesmo, LOCALMENTE (a ferramenta avaliar_pergunta devolve a rubrica; a pergunta do usuário não é enviada ao servidor): 'inferivel' = seguro para pressão direcional de conceito (prioridade, objeção, atrito de onboarding, compreensão, linguagem, tradeoff); 'humano' = exige estado vivido e NÃO deve ser perguntado a persona sintética (satisfação, incidência/vitimização, dano, comportamento passado real, intensidade emocional, confiança após experiência). Não confunda preferência inferida com realidade vivida. O valor do painel é saber o que perguntar a gente de verdade antes de gastar com campo.",
           termos_de_uso:
             "Serviço gratuito de consulta (prova de conceito, projeto Concorde). Os dados do painel são propriedade do autor; uso para consultas e simulações é livre, extração em massa ou redistribuição da base não é autorizada. Há cotas por IP (rajada e diária).",
-          contagens: { personas: personas.length, fatos: fatos.length, vozes: vozes.length, instituicoes: instituicoes.length },
+          contagens: { personas: personas.length, fatos: fatos.length, vozes: vozes.length, instituicoes: 12, fichas_instituicoes: instituicoes.length },
           campos_filtraveis_e_valores: CAMPOS_FILTRAVEIS,
           campos_numericos: ["idade", "renda_mensal_individual", "renda_mensal_familiar", "patrimonio_financeiro", "patrimonio_bens", "valor_divida_ativa"],
         });
@@ -293,7 +293,7 @@ export class PainelMCP extends McpAgent {
       "Prepara uma pesquisa de fan-out ISOLADO por persona (mede sem convergência). A PERGUNTA do usuário NÃO é enviada ao servidor (privacidade): você a classifica localmente pela 'fronteira' e a injeta você mesmo em cada pacote. Sorteia N personas e devolve UM pacote por persona (ficha + formato de resposta) + o protocolo para o HOST disparar UMA tarefa/subagente isolado por pacote — cada um responde só a SUA persona, sem ver as outras. A agregação é feita LOCALMENTE; o servidor não recebe nem armazena nenhuma resposta. Formatos: 'escolha' (opção única → distribuição), 'pontuar' (nota 0-10 por atributo → média+desvio por opção, recomendado para 'o que importa mais' e mais robusto a colapso), 'escala' e 'aberta'. Pode filtrar o segmento (classe, idade, região, etc.) pela DSL.",
       {
         formato: z.enum(["escolha", "pontuar", "escala", "aberta"]).default("escolha").describe("escolha=opção única fechada (gera distribuição, mas pode colapsar em amostra enviesada); pontuar=cada persona dá nota 0-10 a CADA opção (gera média+desvio por opção, preserva a preferência secundária — recomendado para 'o que importa mais'); escala=uma nota numérica; aberta=sem número, só temas/verbatim."),
-        opcoes: z.array(z.string()).optional().describe("Opções fechadas quando formato='escolha' ou 'pontuar'. Ex.: ['Versão A'; 'Versão B']"),
+        opcoes: z.array(z.string()).optional().describe("Opções fechadas quando formato='escolha' ou 'pontuar'. Ex.: ['Versão A', 'Versão B']"),
         escala_min: z.number().int().optional().describe("Mínimo da escala quando formato='escala' (ex.: 1)."),
         escala_max: z.number().int().optional().describe("Máximo da escala quando formato='escala' (ex.: 5)."),
         filtro: z.string().optional().describe("Filtro DSL do segmento — recorta por classe, idade, região, banco, dívida, etc. Ex.: \"classe_social in ['Classe A'; 'Classe B'] & idade > 30 & se_investe == 'Sim'\". Vazio = população toda."),
@@ -302,7 +302,7 @@ export class PainelMCP extends McpAgent {
       },
       async ({ formato, opcoes, escala_min, escala_max, filtro, n, seed }) => {
         if ((formato === "escolha" || formato === "pontuar") && (!opcoes || opcoes.length < 2))
-          return ok({ erro: `formato='${formato}' exige 'opcoes' com pelo menos 2 alternativas.`, exemplo: "opcoes: ['Versão A'; 'Versão B']" });
+          return ok({ erro: `formato='${formato}' exige 'opcoes' com pelo menos 2 alternativas.`, exemplo: "opcoes: ['Versão A', 'Versão B']" });
         if (formato === "escala" && (escala_min === undefined || escala_max === undefined || escala_max <= escala_min))
           return ok({ erro: "formato='escala' exige escala_min e escala_max (com max > min). Ex.: escala_min=1, escala_max=5." });
 
