@@ -5,6 +5,8 @@ import { rotaForum } from "./forum";
 export { ForumDO } from "./forum";
 import { rotaStats, registraPagina, registraMcp } from "./stats";
 export { StatsDO } from "./stats";
+import { rotaPulso } from "./pulso";
+export { PulsoDO } from "./pulso";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { OG_PNG_B64 } from "./og";
@@ -562,6 +564,8 @@ export default {
     if (respStats) return respStats;
     const respForum = await rotaForum(request, env, pathname);
     if (respForum) return respForum;
+    const respPulso = await rotaPulso(request, env, pathname);
+    if (respPulso) return respPulso;
     const leitura = request.method === "GET" || request.method === "HEAD";
     if (leitura && pathname === "/og.png")
       return new Response(request.method === "HEAD" ? null : OG_PNG, {
@@ -578,6 +582,11 @@ export default {
       return new Response(EXTRAS[pathname].corpo, {
         headers: { "Content-Type": `${EXTRAS[pathname].tipo}; charset=utf-8`, "Cache-Control": "public, max-age=3600", ...HEADERS_SEGURANCA },
       });
-    return new Response("404 — rotas: / /persona-sintetica /instalar /usar /forum /privacidade /porque /mcp", { status: 404 });
+    return new Response("404 — rotas: / /persona-sintetica /instalar /usar /pulso /forum /privacidade /porque /mcp", { status: 404 });
+  },
+  async scheduled(_event: ScheduledEvent, env: any, ctx: ExecutionContext) {
+    // Pulso do dia: gera o rascunho via Gemini (semi-auto — aprovação humana em /admin/pulso).
+    if (!env.GEMINI_API_KEY) return;
+    ctx.waitUntil((env.PULSO.get(env.PULSO.idFromName("global")) as any).gerarESalvar(env.GEMINI_API_KEY));
   },
 };

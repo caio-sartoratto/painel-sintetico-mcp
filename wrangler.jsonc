@@ -9,14 +9,17 @@
       { "name": "MCP_OBJECT", "class_name": "PainelMCP" },
       { "name": "QUOTA", "class_name": "QuotaDO" },
       { "name": "FORUM", "class_name": "ForumDO" },
-      { "name": "STATS", "class_name": "StatsDO" }
+      { "name": "STATS", "class_name": "StatsDO" },
+      { "name": "PULSO", "class_name": "PulsoDO" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["PainelMCP"] },
     { "tag": "v2", "new_sqlite_classes": ["QuotaDO"] },
     { "tag": "v3", "new_sqlite_classes": ["ForumDO"] },
-    { "tag": "v4", "new_sqlite_classes": ["StatsDO"] }
+    { "tag": "v4", "new_sqlite_classes": ["StatsDO"] },
+    { "tag": "v5", "new_sqlite_classes": ["PulsoDO"] }
   ],
+  "triggers": { "crons": ["0 8 * * *"] },
   "observability": { "enabled": true }
 }

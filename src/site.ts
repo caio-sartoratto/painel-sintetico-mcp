@@ -134,7 +134,7 @@ function term(titulo: string, pre: string): string {
   return `<div class="term"><div class="titulo-barra"><i class="r"></i><i class="y"></i><i class="g"></i><span>${titulo}</span></div><pre>${pre}</pre></div>`;
 }
 
-function layout(
+export function layout(
   titulo: string,
   ativa: string,
   conteudo: string,
@@ -149,6 +149,7 @@ function layout(
     ["/persona-sintetica", "guia"],
     ["/instalar", "instalar"],
     ["/usar", "usar"],
+    ["/pulso", "pulso"],
     ["/forum", "feedback"],
     ["/privacidade", "privacidade"],
     ["/porque", "porquê"],
@@ -1123,7 +1124,7 @@ export const EXTRAS: Record<string, { corpo: string; tipo: string }> = {
     tipo: "application/xml",
     corpo: `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${Object.keys(PAGINAS)
+${[...Object.keys(PAGINAS), "/pulso"]
   .map((p) => `  <url><loc>${BASE_URL}${p === "/" ? "/" : p}</loc></url>`)
   .join("\n")}
 </urlset>`,
