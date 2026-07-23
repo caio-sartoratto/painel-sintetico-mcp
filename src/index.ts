@@ -564,7 +564,7 @@ export default {
     if (respStats) return respStats;
     const respForum = await rotaForum(request, env, pathname);
     if (respForum) return respForum;
-    const respPulso = await rotaPulso(request, env, pathname);
+    const respPulso = await rotaPulso(request, env, pathname, ctx);
     if (respPulso) return respPulso;
     const leitura = request.method === "GET" || request.method === "HEAD";
     if (leitura && pathname === "/og.png")

@@ -1,7 +1,7 @@
-// Pulso Concorde — pesquisa sintética diária sobre temas quentes de bank/fintech.
-// Pipeline 100% no Gemini (tokens baratos): fan-out isolado por persona (flash) ->
-// redator especialista (flash) -> validador crítico (pro). Gera RASCUNHO; o humano
-// aprova em /admin/pulso (semi-auto). A chave vem do secret env.GEMINI_API_KEY.
+// Pulso Concorde — mini-relatório sintético diário (estilo consultoria) sobre bank/fintech.
+// Por tema: 3-5 perguntas, N=100 personas. Pipeline no Gemini: fan-out isolado (flash, 1 chamada
+// por persona respondendo todas as perguntas) -> redator (pro) -> validador crítico (pro).
+// Geração ASSÍNCRONA (background); rascunho aprovado pelo humano em /admin/pulso.
 import { DurableObject } from "cloudflare:workers";
 import personasData from "./data/personas.json";
 import { layout } from "./site";
@@ -9,35 +9,55 @@ import { layout } from "./site";
 type Persona = Record<string, any>;
 const personas = personasData as Persona[];
 
-const MODELO_FANOUT = "gemini-3.6-flash"; // pesado: 1 chamada por persona
-const MODELO_REDATOR = "gemini-3.1-pro-preview"; // redação do card
-const MODELO_VALIDADOR = "gemini-3.1-pro-preview"; // revisão/validação crítica
-const N_AMOSTRA = 16;
+const MODELO_FANOUT = "gemini-3.6-flash";
+const MODELO_REDATOR = "gemini-3.1-pro-preview";
+const MODELO_VALIDADOR = "gemini-3.1-pro-preview";
+const N_AMOSTRA = 40; // free tier: limite de 50 subrequests/invocação. Workers Paid → suba p/ 100.
+const LOTE = 12; // concorrência do fan-out
 const BASE_URL = "https://painel.concorde-painel.workers.dev";
 
-// responseSchema: garante JSON válido do Gemini (corpo HTML com aspas não quebra mais o parse).
-const S = (props: any, req: string[]) => ({ type: "OBJECT", properties: props, required: req });
-const SCHEMA_FANOUT = S({ escolha: { type: "STRING" }, verbatim: { type: "STRING" }, fonte: { type: "STRING" } }, ["escolha", "verbatim"]);
-const SCHEMA_REDATOR = S({ titulo: { type: "STRING" }, corpo: { type: "STRING" }, leitura: { type: "STRING" } }, ["titulo", "corpo", "leitura"]);
-const SCHEMA_VALIDADOR = S({ aprovado: { type: "BOOLEAN" }, nota: { type: "NUMBER" }, problemas: { type: "ARRAY", items: { type: "STRING" } }, correcao: { type: "STRING" } }, ["aprovado"]);
+type Pergunta = { id: string; texto: string; opcoes: string[] };
+type Tema = { slug: string; tema: string; descricao: string; perguntas: Pergunta[] };
 
-// Fila de temas — banda INFERÍVEL apenas (preferência/prioridade/objeção; nunca estado vivido).
-const ROTACAO: Array<{ slug: string; tema: string; pergunta: string; opcoes: string[] }> = [
-  { slug: "pix-automatico", tema: "Pix Automático", pergunta: "O que mais pesaria na sua decisão de ativar (ou não) o Pix Automático para contas recorrentes?", opcoes: ["Praticidade de não esquecer", "Medo de debitarem errado", "Poder cancelar num toque", "Não confio em débito automático"] },
-  { slug: "drex-real-digital", tema: "Drex (real digital)", pergunta: "Se o seu banco oferecesse o Drex hoje, o que pesaria mais na decisão de usar?", opcoes: ["Mais segurança que o Pix", "Não entendo pra que serve", "Se for aceito no comércio", "Desconfio de rastreamento"] },
-  { slug: "open-finance", tema: "Open Finance", pergunta: "O que mais te faria (ou não) compartilhar seus dados bancários entre instituições?", opcoes: ["Ofertas de crédito melhores", "Medo de vazamento", "Ver tudo num app só", "Não vejo vantagem pra mim"] },
-  { slug: "tarifa-zero", tema: "Tarifa zero", pergunta: "Entre um banco de tarifa zero e um pacote pago com benefícios, o que te atrai mais?", opcoes: ["Tarifa zero, sempre", "Pago se tiver bom atendimento", "Pago por cashback/benefício", "Depende do limite de crédito"] },
-  { slug: "credito-por-ia", tema: "Crédito aprovado por IA", pergunta: "O que mais te deixaria confortável com um limite de crédito definido por IA?", opcoes: ["Aprovação na hora", "Saber por que fui aprovado/negado", "Poder falar com humano", "Não confio em IA decidindo isso"] },
-  { slug: "seguranca-golpe", tema: "Segurança contra golpe", pergunta: "Qual recurso te deixaria mais seguro para usar o banco no dia a dia?", opcoes: ["Confirmar transferência grande por biometria", "Limite de valor por horário", "Bloqueio de tudo num toque", "Alerta de golpe em tempo real"] },
-  { slug: "super-app", tema: "Super app bancário", pergunta: "Um app do banco que também vende celular, viagem e seguro: como você reage?", opcoes: ["Prático, tudo num lugar", "Vira bagunça, quero só banco", "Uso se for mais barato", "Desconfio da mistura"] },
-  { slug: "investir-no-app", tema: "Investir pelo app do banco", pergunta: "O que mais te faria investir pelo app do próprio banco em vez de uma corretora?", opcoes: ["Praticidade de ter tudo junto", "Confio mais no meu banco", "Corretora rende mais", "Não invisto"] },
-  { slug: "cartao-beneficio", tema: "Cartão: o que vale", pergunta: "Num cartão de crédito, o que mais pesa pra você hoje?", opcoes: ["Sem anuidade", "Cashback", "Milhas/pontos", "Limite alto"] },
-  { slug: "digital-vs-agencia", tema: "Digital vs. agência", pergunta: "O que ainda te faria querer uma agência física em vez de um banco 100% digital?", opcoes: ["Resolver problema sério cara a cara", "Sacar/depositar dinheiro", "Não faz falta, resolvo no app", "Confiança de ter um lugar físico"] },
-  { slug: "antecipa-salario", tema: "Antecipação de salário", pergunta: "O que mais pesaria em usar (ou não) a antecipação de salário do app?", opcoes: ["Socorro quando aperta", "A taxa cobrada", "Medo de virar dependência", "Prefiro não dever ao banco"] },
-  { slug: "assistente-ia-app", tema: "Assistente de IA no app", pergunta: "Um assistente de IA dentro do app do banco: pra que você mais usaria?", opcoes: ["Entender pra onde vai meu dinheiro", "Resolver problema sem fila", "Dicas de como economizar", "Não usaria, prefiro fazer eu mesmo"] },
+// Rotação de temas — cada um com 3-5 perguntas INFERÍVEIS (preferência/prioridade/objeção).
+const ROTACAO: Tema[] = [
+  {
+    slug: "open-finance", tema: "Open Finance", descricao: "Compartilhamento de dados entre instituições: barreiras, gatilhos e confiança.",
+    perguntas: [
+      { id: "barreira", texto: "O que mais pesa CONTRA você compartilhar seus dados bancários no Open Finance?", opcoes: ["Medo de vazamento", "Não vejo vantagem", "Não entendo como funciona", "Não tenho receio"] },
+      { id: "gatilho", texto: "O que te faria topar compartilhar?", opcoes: ["Crédito com juros menores", "Ver tudo num app só", "Ofertas personalizadas", "Nada me convence"] },
+      { id: "confianca", texto: "Em quem você confiaria mais para centralizar seus dados?", opcoes: ["Meu banco principal", "Um banco digital", "Uma fintech nova", "Não confiaria em ninguém"] },
+      { id: "prazo", texto: "Se compartilhasse, por quanto tempo deixaria ativo?", opcoes: ["Só enquanto preciso", "Sempre, se for seguro", "Nunca deixaria ligado", "Não sei dizer"] },
+    ],
+  },
+  {
+    slug: "pix-automatico", tema: "Pix Automático", descricao: "Débito recorrente via Pix: adesão, medo e controle.",
+    perguntas: [
+      { id: "adesao", texto: "O que mais pesaria pra você ATIVAR o Pix Automático em contas recorrentes?", opcoes: ["Praticidade de não esquecer", "Confiança no recebedor", "Desconto por usar", "Não ativaria"] },
+      { id: "medo", texto: "Qual seu maior receio com o Pix Automático?", opcoes: ["Debitarem valor errado", "Não conseguir cancelar", "Faltar saldo na hora", "Não tenho receio"] },
+      { id: "controle", texto: "Qual controle te deixaria mais seguro?", opcoes: ["Cancelar num toque", "Teto de valor por débito", "Aviso antes de cada débito", "Pausar quando quiser"] },
+    ],
+  },
+  {
+    slug: "credito-por-ia", tema: "Crédito aprovado por IA", descricao: "Limite e crédito decididos por IA: conforto, transparência e recurso humano.",
+    perguntas: [
+      { id: "conforto", texto: "O que mais te deixaria confortável com um limite definido por IA?", opcoes: ["Aprovação na hora", "Entender o porquê", "Poder falar com humano", "Nada, não confio"] },
+      { id: "objecao", texto: "O que mais te incomodaria numa negativa da IA?", opcoes: ["Não saber o motivo", "Não ter como recorrer", "Achar injusto/enviesado", "Não me incomodaria"] },
+      { id: "tradeoff", texto: "Você trocaria mais dados por um limite maior?", opcoes: ["Sim, se render limite melhor", "Só dados básicos", "Não, prefiro privacidade", "Depende do banco"] },
+    ],
+  },
+  {
+    slug: "tarifa-vs-beneficio", tema: "Tarifa zero vs. benefícios", descricao: "O que o cliente valoriza entre gratuidade, atendimento e recompensa.",
+    perguntas: [
+      { id: "preferencia", texto: "Entre tarifa zero e um pacote pago com benefícios, o que te atrai mais?", opcoes: ["Tarifa zero sempre", "Pago por bom atendimento", "Pago por cashback", "Depende do limite"] },
+      { id: "cartao", texto: "Num cartão de crédito, o que mais pesa hoje?", opcoes: ["Sem anuidade", "Cashback", "Milhas/pontos", "Limite alto"] },
+      { id: "troca", texto: "O que te faria trocar de banco principal?", opcoes: ["Menos tarifa", "App melhor", "Crédito mais fácil", "Atendimento humano"] },
+    ],
+  },
 ];
 
 // ---------- Gemini ----------
+const S = (props: any, req: string[]) => ({ type: "OBJECT", properties: props, required: req });
 async function gemini(model: string, system: string, prompt: string, apiKey: string, schema?: any): Promise<any> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const body = {
@@ -52,10 +72,9 @@ async function gemini(model: string, system: string, prompt: string, apiKey: str
   try { return JSON.parse(txt); } catch { return JSON.parse(txt.replace(/```json\s*|\s*```/g, "").trim()); }
 }
 
-// ---------- Amostra / persona ----------
+// ---------- Amostra ----------
 const MINI = ["idade", "classe_social", "genero", "regiao", "profissao", "fonte_renda", "renda_mensal_familiar", "banco_principal", "se_investe", "divida_ativa"];
 function mini(p: Persona) { return Object.fromEntries(MINI.map((c) => [c, p[c]])); }
-
 function amostra(n: number, seed: number): Persona[] {
   const pool = [...personas];
   let s = (seed >>> 0) || 1;
@@ -63,66 +82,101 @@ function amostra(n: number, seed: number): Persona[] {
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   return pool.slice(0, Math.min(n, pool.length));
 }
+async function emLotes<T, R>(items: T[], tam: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < items.length; i += tam) out.push(...(await Promise.all(items.slice(i, i + tam).map(fn))));
+  return out;
+}
 
 // ---------- Pipeline ----------
-async function fanOut(pergunta: string, opcoes: string[], amostraP: Persona[], apiKey: string) {
-  const sys = "Você RESPONDE como a persona descrita, em 1ª pessoa, curto, fiel aos atributos e ancorado no Grounding (fatos com fonte). Não invente atributos. Se se_investe='Não', não fale como investidora. Escolha UMA das opções exatas. Responda só JSON.";
-  const res = await Promise.all(amostraP.map(async (p) => {
-    const prompt = `Atributos: ${JSON.stringify(mini(p))}\nGrounding:\n${(p.grounding ?? "").slice(0, 2500)}\n\nPergunta: "${pergunta}"\nOpções: ${JSON.stringify(opcoes)}\nResponda JSON: {"escolha": "<uma opção EXATA da lista>", "verbatim": "1 frase em 1ª pessoa fiel à ficha", "fonte": "id ou estatística do Grounding que embasa"}`;
-    try {
-      const a = await gemini(MODELO_FANOUT, sys, prompt, apiKey, SCHEMA_FANOUT);
-      const escolha = opcoes.find((o) => o.toLowerCase() === String(a.escolha ?? "").toLowerCase()) ?? null;
-      if (!escolha) return null;
-      return { id: p.id, escolha, verbatim: String(a.verbatim ?? "").slice(0, 320), fonte: String(a.fonte ?? "").slice(0, 160), perfil: `${p.idade}a, ${p.profissao}, ${p.classe_social} (${p.regiao})` };
-    } catch { return null; }
-  }));
+async function fanOut(tema: Tema, amostraP: Persona[], apiKey: string) {
+  const sys = "Você RESPONDE como a persona descrita, em 1ª pessoa, fiel aos atributos e ancorado no Grounding (fatos com fonte). Não invente atributos. Se se_investe='Não', não fale como investidora. Para CADA pergunta escolha UMA opção EXATA da lista dela. Dê também 1 verbatim curto (sua fala mais marcante sobre o tema) e a fonte no Grounding. Responda só JSON.";
+  const schema = S({
+    respostas: S(Object.fromEntries(tema.perguntas.map((q) => [q.id, { type: "STRING" }])), tema.perguntas.map((q) => q.id)),
+    verbatim: { type: "STRING" }, fonte: { type: "STRING" },
+  }, ["respostas", "verbatim"]);
+  const perguntasTxt = tema.perguntas.map((q) => `[${q.id}] ${q.texto} Opções: ${JSON.stringify(q.opcoes)}`).join("\n");
+  const res = await emLotes(amostraP, LOTE, async (p) => {
+    const prompt = `Atributos: ${JSON.stringify(mini(p))}\nGrounding:\n${(p.grounding ?? "").slice(0, 2200)}\n\nTema: ${tema.tema}\nResponda cada pergunta escolhendo UMA opção exata da lista dela:\n${perguntasTxt}\n\nJSON: {"respostas": {${tema.perguntas.map((q) => `"${q.id}": "<opção exata>"`).join(", ")}}, "verbatim": "1 frase em 1ª pessoa fiel à ficha", "fonte": "id ou estatística do Grounding"}`;
+    let a: any = null;
+    try { a = await gemini(MODELO_FANOUT, sys, prompt, apiKey, schema); } catch { return null; }
+    const respostas: Record<string, string> = {};
+    for (const q of tema.perguntas) {
+      const val = q.opcoes.find((o) => o.toLowerCase() === String(a?.respostas?.[q.id] ?? "").toLowerCase());
+      if (val) respostas[q.id] = val;
+    }
+    if (Object.keys(respostas).length < tema.perguntas.length) return null;
+    return { id: p.id, respostas, verbatim: String(a.verbatim ?? "").slice(0, 320), fonte: String(a.fonte ?? "").slice(0, 160), perfil: `${p.idade}a, ${p.profissao}, ${p.classe_social} (${p.regiao})` };
+  });
   return res.filter(Boolean) as any[];
 }
 
-function agrega(respostas: any[], opcoes: string[]) {
-  const cont: Record<string, number> = {}; opcoes.forEach((o) => (cont[o] = 0));
-  respostas.forEach((r) => { if (cont[r.escolha] !== undefined) cont[r.escolha]++; });
+function agregaTudo(respostas: any[], perguntas: Pergunta[]) {
   const n = respostas.length;
-  const dist = opcoes.map((o) => ({ opcao: o, n: cont[o], pct: n ? Math.round((cont[o] / n) * 100) : 0 })).sort((a, b) => b.n - a.n);
-  return { n, dist };
+  return perguntas.map((q) => {
+    const cont: Record<string, number> = {}; q.opcoes.forEach((o) => (cont[o] = 0));
+    respostas.forEach((r) => { if (cont[r.respostas[q.id]] !== undefined) cont[r.respostas[q.id]]++; });
+    const dist = q.opcoes.map((o) => ({ opcao: o, n: cont[o], pct: n ? Math.round((cont[o] / n) * 100) : 0 })).sort((a, b) => b.n - a.n);
+    return { id: q.id, texto: q.texto, distribuicao: dist };
+  });
 }
 
-async function redator(tema: string, pergunta: string, agg: any, verbatims: any[], apiKey: string, ajuste = "") {
-  const sys = "Você é o redator do Pulso Concorde, especialista em cards curtos e afiados sobre a opinião do consumidor bancário brasileiro, ancorados em dados sintéticos. REGRAS INEGOCIÁVEIS: (1) o painel dá DIREÇÃO, não nível absoluto — NUNCA escreva 'X% dos brasileiros'; escreva 'na amostra' ou 'o painel projeta'; (2) sempre honesto, sem hype nem promessa; (3) use só os verbatims fornecidos e cite a fonte deles; (4) corpo com 2 a 3 parágrafos em <p>...</p>, mais uma leitura de 1 frase. Responda só JSON.";
-  const prompt = `Tema: ${tema}\nPergunta: ${pergunta}\nDistribuição (amostra sintética n=${agg.n}): ${JSON.stringify(agg.dist)}\nVerbatims disponíveis: ${JSON.stringify(verbatims)}\n${ajuste ? "AJUSTE PEDIDO PELO EDITOR: " + ajuste + "\n" : ""}\nEscreva JSON: {"titulo": "manchete curta e específica (sem % absoluto)", "corpo": "2-3 parágrafos <p>...</p> analisando a direção e citando 1-2 verbatims com a fonte", "leitura": "1 frase: o que isso sugere para quem constrói produto bank/fintech"}`;
-  return await gemini(MODELO_REDATOR, sys, prompt, apiKey, SCHEMA_REDATOR);
+function pickVerbatims(respostas: any[], k: number) {
+  return respostas.filter((r) => r.verbatim).slice(0, k).map((r) => ({ verbatim: r.verbatim, fonte: r.fonte, perfil: r.perfil, id: r.id }));
 }
 
-async function validador(rascunho: any, agg: any, verbatims: any[], pergunta: string, apiKey: string) {
-  const sys = "Você é o editor-crítico rigoroso do Pulso Concorde e o guardião da credibilidade. REPROVE se o rascunho: inventou número ou usou número fora da distribuição; fez claim de nível absoluto ('X% dos brasileiros') sem enquadrar como direção/amostra; tem tom vendedor/hype/promessa; usa verbatim que não está na lista; ou trata a pergunta como se medisse estado vivido (satisfação, vitimização). Responda só JSON.";
-  const prompt = `Pergunta: ${pergunta}\nDistribuição real: ${JSON.stringify(agg.dist)}\nVerbatims válidos: ${JSON.stringify(verbatims.map((v) => v.verbatim))}\nRascunho: ${JSON.stringify(rascunho)}\n\nResponda JSON: {"aprovado": true, "nota": 0-10, "problemas": ["..."], "correcao": "instrução curta pro redator se reprovado, senão string vazia"}`;
-  return await gemini(MODELO_VALIDADOR, sys, prompt, apiKey, SCHEMA_VALIDADOR);
+async function redator(tema: Tema, blocos: any[], verbatims: any[], n: number, apiKey: string) {
+  const sys = "Você é o redator do Pulso Concorde, especialista em mini-relatórios estilo consultoria (BCG/McKinsey) sobre o consumidor bancário brasileiro, ancorados em dados sintéticos. REGRAS INEGOCIÁVEIS: (1) o painel dá DIREÇÃO, não nível absoluto — NUNCA escreva 'X% dos brasileiros'; use 'na amostra' ou 'o painel projeta'; (2) honesto, sem hype nem promessa; (3) as análises comentam a DISTRIBUIÇÃO (a opção dominante e o que ela sugere) — NÃO cite falas/verbatims, NÃO invente pessoas nem perfis demográficos, NÃO escreva 'Fonte:' nem ids de fatos no texto (as falas dos consumidores aparecem em seção própria, à parte, com as fontes reais); (4) 2-4 frases por análise, sumário executivo denso, recomendação acionável. Responda só JSON.";
+  const schema = S({
+    titulo: { type: "STRING" }, sumario: { type: "STRING" },
+    blocos: { type: "ARRAY", items: S({ id: { type: "STRING" }, analise: { type: "STRING" } }, ["id", "analise"]) },
+    leitura: { type: "STRING" },
+  }, ["titulo", "sumario", "blocos", "leitura"]);
+  const prompt = `Tema: ${tema.tema} — ${tema.descricao}\nAmostra sintética n=${n}\nPerguntas e distribuições: ${JSON.stringify(blocos.map((b) => ({ id: b.id, pergunta: b.texto, distribuicao: b.distribuicao })))}\n\nEscreva um mini-relatório JSON: {"titulo": "manchete do achado principal (sem % absoluto)", "sumario": "2-3 frases de sumário executivo conectando as perguntas", "blocos": [{"id":"<id da pergunta>", "analise":"2-4 frases interpretando a distribuição desta pergunta (a opção dominante e o que sugere), SEM citar falas, pessoas ou fontes"}], "leitura": "1 recomendação acionável para quem constrói produto bank/fintech"}`;
+  return await gemini(MODELO_REDATOR, sys, prompt, apiKey, schema);
+}
+
+async function validador(rep: any, blocos: any[], verbatims: any[], apiKey: string) {
+  const sys = "Você é o editor-crítico rigoroso do Pulso Concorde e guardião da credibilidade. REPROVE se: inventou número ou usou número fora das distribuições; fez claim de nível absoluto ('X% dos brasileiros') sem enquadrar como direção/amostra; tom vendedor/hype; usou verbatim fora da lista; ou tratou alguma pergunta como se medisse estado vivido (satisfação, vitimização). Responda só JSON.";
+  const schema = S({ aprovado: { type: "BOOLEAN" }, nota: { type: "NUMBER" }, problemas: { type: "ARRAY", items: { type: "STRING" } } }, ["aprovado"]);
+  const prompt = `Distribuições reais: ${JSON.stringify(blocos.map((b) => ({ id: b.id, distribuicao: b.distribuicao })))}\nVerbatims válidos: ${JSON.stringify(verbatims.map((v: any) => v.verbatim))}\nRelatório: ${JSON.stringify(rep)}\n\nResponda JSON: {"aprovado": true/false, "nota": 0-10, "problemas": ["..."]}`;
+  return await gemini(MODELO_VALIDADOR, sys, prompt, apiKey, schema);
 }
 
 export async function gerarPulso(apiKey: string, itemIndex: number) {
   if (!apiKey) throw new Error("GEMINI_API_KEY ausente (rode: wrangler secret put GEMINI_API_KEY).");
-  const item = ROTACAO[((itemIndex % ROTACAO.length) + ROTACAO.length) % ROTACAO.length];
+  const tema = ROTACAO[((itemIndex % ROTACAO.length) + ROTACAO.length) % ROTACAO.length];
   const seed = Math.floor(Math.random() * 1e9);
-  const respostas = await fanOut(item.pergunta, item.opcoes, amostra(N_AMOSTRA, seed), apiKey);
-  if (respostas.length < 5) throw new Error(`Fan-out fraco (${respostas.length} respostas).`);
-  const agg = agrega(respostas, item.opcoes);
-  const verbatims = respostas.map((r) => ({ verbatim: r.verbatim, fonte: r.fonte, perfil: r.perfil, id: r.id })).slice(0, 8);
-  let rascunho = await redator(item.tema, item.pergunta, agg, verbatims, apiKey);
-  let val = await validador(rascunho, agg, verbatims, item.pergunta, apiKey);
-  if (val && val.aprovado === false && val.correcao) {
-    rascunho = await redator(item.tema, item.pergunta, agg, verbatims, apiKey, val.correcao);
-    val = await validador(rascunho, agg, verbatims, item.pergunta, apiKey);
-  }
+  const respostas = await fanOut(tema, amostra(N_AMOSTRA, seed), apiKey);
+  if (respostas.length < 20) throw new Error(`Fan-out fraco (${respostas.length} respostas).`);
+  const blocos = agregaTudo(respostas, tema.perguntas);
+  const verbatims = pickVerbatims(respostas, 8);
+  const rep = await redator(tema, blocos, verbatims, respostas.length, apiKey);
+  const val = await validador(rep, blocos, verbatims, apiKey);
+  const blocosFinal = blocos.map((b) => ({ ...b, analise: String((rep?.blocos || []).find((x: any) => x.id === b.id)?.analise ?? "") }));
   const data = new Date().toISOString().slice(0, 10);
   return {
-    slug: `${data}-${item.slug}`, data, tema: item.tema, pergunta: item.pergunta, opcoes: item.opcoes,
-    distribuicao: agg.dist, n: agg.n, seed, verbatims,
-    titulo: String(rascunho?.titulo ?? item.tema), corpo: String(rascunho?.corpo ?? ""), leitura: String(rascunho?.leitura ?? ""),
+    slug: `${data}-${tema.slug}`, data, tema: tema.tema, descricao: tema.descricao, n: respostas.length, seed,
+    blocos: blocosFinal, verbatims, titulo: String(rep?.titulo ?? tema.tema), sumario: String(rep?.sumario ?? ""), leitura: String(rep?.leitura ?? ""),
     validacao: val ?? null, status: "rascunho", criado_em: Date.now(),
   };
 }
 
-// ---------- Storage (Durable Object) ----------
+// Roda NO WORKER (código sempre atualizado no deploy); o DO só guarda.
+export async function gerarPulsoDoDia(env: any): Promise<string> {
+  const doo = env.PULSO.get(env.PULSO.idFromName("global")) as any;
+  const ptr = await doo.proximoPtr();
+  try {
+    const entry = await gerarPulso(env.GEMINI_API_KEY, ptr);
+    await doo.salvarRascunho(entry);
+    return entry.slug;
+  } catch (e: any) {
+    await doo.registrarErro(String(e?.message ?? e));
+    throw e;
+  }
+}
+
+// ---------- Storage ----------
 export class PulsoDO extends DurableObject {
   private async idx(k: string): Promise<string[]> { return ((await this.ctx.storage.get(k)) as string[] | undefined) ?? []; }
   async proximoPtr(): Promise<number> {
@@ -131,10 +185,13 @@ export class PulsoDO extends DurableObject {
     return ptr;
   }
   async salvarRascunho(entry: any): Promise<void> {
+    await this.ctx.storage.delete("ultimo_erro");
     await this.ctx.storage.put(`e:${entry.slug}`, entry);
     const d = await this.idx("idx:draft");
     if (!d.includes(entry.slug)) { d.unshift(entry.slug); await this.ctx.storage.put("idx:draft", d); }
   }
+  async registrarErro(msg: string): Promise<void> { await this.ctx.storage.put("ultimo_erro", `${new Date().toISOString()} — ${msg}`); }
+  async pegarErro(): Promise<string | null> { return ((await this.ctx.storage.get("ultimo_erro")) as string | undefined) ?? null; }
   async obter(slug: string): Promise<any> { return (await this.ctx.storage.get(`e:${slug}`)) as any; }
   async listar(status: "publicado" | "rascunho"): Promise<any[]> {
     const ids = await this.idx(status === "publicado" ? "idx:pub" : "idx:draft");
@@ -145,7 +202,7 @@ export class PulsoDO extends DurableObject {
   async publicar(slug: string, edits: Record<string, string>): Promise<boolean> {
     const e = (await this.ctx.storage.get(`e:${slug}`)) as any; if (!e) return false;
     if (edits.titulo) e.titulo = edits.titulo;
-    if (edits.corpo) e.corpo = edits.corpo;
+    if (edits.sumario) e.sumario = edits.sumario;
     if (edits.leitura) e.leitura = edits.leitura;
     e.status = "publicado"; e.publicado_em = Date.now();
     await this.ctx.storage.put(`e:${slug}`, e);
@@ -154,151 +211,146 @@ export class PulsoDO extends DurableObject {
     if (!pub.includes(slug)) { pub.unshift(slug); await this.ctx.storage.put("idx:pub", pub); }
     return true;
   }
-  async descartar(slug: string): Promise<void> {
+  async apagar(slug: string): Promise<void> {
     await this.ctx.storage.delete(`e:${slug}`);
     await this.ctx.storage.put("idx:draft", (await this.idx("idx:draft")).filter((x) => x !== slug));
+    await this.ctx.storage.put("idx:pub", (await this.idx("idx:pub")).filter((x) => x !== slug));
   }
-}
-
-// Roda a geração NO CONTEXTO DO WORKER (código sempre atualizado no deploy); o DO só guarda.
-export async function gerarPulsoDoDia(env: any): Promise<string> {
-  const doo = env.PULSO.get(env.PULSO.idFromName("global")) as any;
-  const ptr = await doo.proximoPtr();
-  const entry = await gerarPulso(env.GEMINI_API_KEY, ptr);
-  await doo.salvarRascunho(entry);
-  return entry.slug;
+  async limparTudo(): Promise<void> { await this.ctx.storage.deleteAll(); }
 }
 
 // ---------- Render ----------
 function esc(s: string): string { return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
-function limpaCorpo(html: string): string { return String(html ?? "").replace(/<script[\s\S]*?<\/script>/gi, "").replace(/ on\w+="[^"]*"/gi, ""); }
 
-const CARIMBO = "Projeção direcional do Painel Sintético Concorde (amostra de personas sintéticas calibradas com IBGE/Bacen/ABEP). Mede direção e prioridade, não nível absoluto nem intenção real de uso — não é pesquisa de campo.";
+const CARIMBO = "Projeção direcional do Painel Sintético Concorde (100 personas sintéticas calibradas com IBGE/Bacen/ABEP). Mede direção e prioridade, não nível absoluto nem intenção real de uso — não é pesquisa de campo.";
 
-function barras(dist: any[]): string {
-  const max = Math.max(1, ...dist.map((d) => d.n));
-  return `<div class="pulso-dist">${dist.map((d) => `<div class="pulso-linha"><span class="pulso-op">${esc(d.opcao)}</span><span class="pulso-bar" style="width:${Math.max(4, Math.round((d.n / max) * 100))}%"></span><span class="pulso-pct">${d.pct}%</span></div>`).join("")}</div>`;
+const CSS_PULSO = `<style>
+.pulso-card{border:1px solid var(--borda);border-radius:12px;padding:26px;margin:22px 0;background:var(--janela)}
+.pulso-meta{color:var(--dim);font-size:.82em;margin:0 0 8px}
+.pulso-tag{color:var(--roxo);font-weight:600}
+.pulso-titulo{margin:.15em 0 .35em;font-size:1.5em;line-height:1.2}
+.pulso-titulo a{color:var(--texto)}
+.pulso-sumario{color:#d1d1d6;font-size:1.02em;border-left:3px solid var(--roxo);padding-left:14px;margin:14px 0 22px}
+.tc-q{font-size:1em;font-weight:600;margin:26px 0 12px;color:var(--texto)}
+.tc-chart{margin:6px 0 6px}
+.tc-row{display:grid;grid-template-columns:minmax(84px,32%) 1fr auto;align-items:center;gap:12px;margin:7px 0;font-size:.9em}
+.tc-cat{text-align:right;color:var(--dim);line-height:1.2}
+.tc-track{background:#1c1c20;border-radius:3px;height:22px;overflow:hidden}
+.tc-bar{height:100%;background:#3a3a40;border-radius:3px;transition:none}
+.tc-row.top .tc-bar{background:var(--roxo)}
+.tc-row.top .tc-cat{color:var(--texto);font-weight:600}
+.tc-val{font-variant-numeric:tabular-nums;font-weight:700;min-width:42px;text-align:right;color:var(--dim)}
+.tc-row.top .tc-val{color:var(--roxo)}
+.tc-analise{color:#c7c7cc;margin:10px 0 2px;font-size:.95em;line-height:1.55}
+.pulso-leitura{border-left:3px solid var(--verde);padding-left:14px;margin:24px 0}
+.pulso-v{border-left:2px solid var(--borda);margin:12px 0;padding:4px 0 4px 14px;color:#d1d1d6}
+.pulso-v cite{display:block;margin-top:5px;font-size:.82em;color:var(--dim);font-style:normal}
+.pulso-carimbo{margin-top:22px;font-size:.78em;color:var(--dim);border-top:1px solid var(--borda);padding-top:12px}
+.pulso-admin form{border:1px dashed var(--borda);border-radius:10px;padding:16px;margin:16px 0}
+.pulso-admin input,.pulso-admin textarea{width:100%;background:#111;border:1px solid var(--borda);color:var(--texto);border-radius:6px;padding:8px;font:inherit;font-size:15px;margin:4px 0 12px}
+.pulso-admin label{font-size:.85em;color:var(--dim)}
+</style>`;
+
+function chartHtml(b: any): string {
+  const rows = (b.distribuicao || []).map((d: any, i: number) => `<div class="tc-row ${i === 0 && d.pct > 0 ? "top" : ""}"><span class="tc-cat">${esc(d.opcao)}</span><div class="tc-track"><div class="tc-bar" style="width:${Math.max(2, d.pct)}%"></div></div><span class="tc-val">${d.pct}%</span></div>`).join("");
+  return `<h3 class="tc-q">${esc(b.texto)}</h3><div class="tc-chart">${rows}</div>${b.analise ? `<p class="tc-analise">${esc(b.analise)}</p>` : ""}`;
 }
-
 function verbatimsHtml(vs: any[]): string {
-  return vs.slice(0, 6).map((v) => `<blockquote class="pulso-v">"${esc(v.verbatim)}"<cite>— ${esc(v.perfil)}${v.fonte ? ` · <span class="dim">fonte: ${esc(v.fonte)}</span>` : ""}</cite></blockquote>`).join("");
+  return (vs || []).slice(0, 6).map((v) => `<blockquote class="pulso-v">"${esc(v.verbatim)}"<cite>— ${esc(v.perfil)}${v.fonte ? ` · <span class="dim">fonte: ${esc(v.fonte)}</span>` : ""}</cite></blockquote>`).join("");
 }
-
 function cardEntry(e: any, linkTitulo: boolean): string {
   const titulo = linkTitulo ? `<a href="/pulso/${esc(e.slug)}">${esc(e.titulo)}</a>` : esc(e.titulo);
   return `<article class="pulso-card">
-<p class="pulso-meta"><span class="pulso-tag">${esc(e.tema)}</span> · ${esc(e.data)} · amostra n=${e.n} · seed ${e.seed}</p>
+<p class="pulso-meta"><span class="pulso-tag">${esc(e.tema)}</span> · ${esc(e.data)} · amostra n=${e.n} · ${(e.blocos || []).length} perguntas · seed ${e.seed}</p>
 <h2 class="pulso-titulo">${titulo}</h2>
-<p class="pulso-pergunta">${esc(e.pergunta)}</p>
-${barras(e.distribuicao || [])}
-<div class="pulso-corpo">${limpaCorpo(e.corpo)}</div>
+${e.sumario ? `<p class="pulso-sumario">${esc(e.sumario)}</p>` : ""}
+${(e.blocos || []).map(chartHtml).join("")}
 ${e.leitura ? `<p class="pulso-leitura"><b>Leitura:</b> ${esc(e.leitura)}</p>` : ""}
-${verbatimsHtml(e.verbatims || [])}
+<h3 class="tc-q">Voz do consumidor</h3>
+${verbatimsHtml(e.verbatims)}
 <p class="pulso-carimbo">${CARIMBO} · Reproduza: seed ${e.seed}.</p>
 </article>`;
 }
-
-const CSS_PULSO = `<style>
-.pulso-card{border:1px solid var(--borda);border-radius:12px;padding:22px;margin:22px 0;background:var(--janela)}
-.pulso-meta{color:var(--dim);font-size:.82em;margin:0 0 6px}
-.pulso-tag{color:var(--roxo);font-weight:600}
-.pulso-titulo{margin:.2em 0 .3em;font-size:1.35em}
-.pulso-titulo a{color:var(--texto)}
-.pulso-pergunta{color:var(--dim);margin:0 0 16px}
-.pulso-dist{margin:14px 0}
-.pulso-linha{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;margin:7px 0}
-.pulso-op{font-size:.92em}
-.pulso-bar{grid-column:1/2;grid-row:2;height:10px;border-radius:5px;background:var(--roxo);min-width:4px}
-.pulso-op{grid-column:1/2;grid-row:1}
-.pulso-pct{grid-column:2;grid-row:1/3;color:var(--dim);font-variant-numeric:tabular-nums}
-.pulso-corpo{margin:16px 0}
-.pulso-leitura{border-left:3px solid var(--roxo);padding-left:12px;margin:16px 0}
-.pulso-v{border-left:2px solid var(--borda);margin:10px 0;padding:4px 0 4px 12px;color:#d1d1d6}
-.pulso-v cite{display:block;margin-top:4px;font-size:.82em;color:var(--dim);font-style:normal}
-.pulso-carimbo{margin-top:16px;font-size:.78em;color:var(--dim);border-top:1px solid var(--borda);padding-top:10px}
-.pulso-admin form{border:1px dashed var(--borda);border-radius:10px;padding:14px;margin:14px 0}
-.pulso-admin input,.pulso-admin textarea{width:100%;background:#111;border:1px solid var(--borda);color:var(--texto);border-radius:6px;padding:8px;font:inherit;font-size:15px;margin:4px 0}
-</style>`;
 
 function feedHtml(entries: any[]): string {
   const corpo = `<main style="padding-top:52px"><div class="wrap">
 <p class="zsh"><b>concorde@painel</b> ~ % <i>painel --pulso</i></p>
 <h1 style="margin-top:8px">Pulso Concorde<span class="cursor"></span></h1>
-<p class="sub">Uma pesquisa sintética por dia sobre o que está em alta em bank e fintech no Brasil. Cada card é uma projeção <b>direcional</b> do painel de 787 personas — o que o consumidor prioriza e por quê, com as falas ancoradas em dado público. Não é pesquisa de campo.</p>
+<p class="sub">Um mini-relatório sintético por dia sobre o que está em alta em bank e fintech. Cada edição roda 3-5 perguntas com 100 personas do painel e mostra a <b>direção</b> do consumidor — prioridades, objeções e a voz por trás dos números, ancorada em dado público. Não é pesquisa de campo.</p>
 ${entries.length ? entries.map((e) => cardEntry(e, true)).join("") : `<p class="dim" style="margin-top:30px">O primeiro Pulso sai em breve. Enquanto isso, veja <a href="/">como o painel funciona</a>.</p>`}
 </div></main>`;
-  const jsonld = JSON.stringify({ "@context": "https://schema.org", "@type": "CollectionPage", name: "Pulso Concorde", description: "Pesquisa sintética diária sobre temas de bank e fintech no Brasil.", url: `${BASE_URL}/pulso`, inLanguage: "pt-BR" });
-  return layout("Pulso Concorde — pesquisa sintética diária de bank/fintech", "pulso", corpo, CSS_PULSO, "/pulso", "Uma pesquisa sintética por dia sobre temas quentes de bank e fintech no Brasil: o que o consumidor prioriza, com falas ancoradas em dados públicos (IBGE, Bacen, ABEP).", jsonld);
+  const jsonld = JSON.stringify({ "@context": "https://schema.org", "@type": "CollectionPage", name: "Pulso Concorde", description: "Mini-relatório sintético diário sobre temas de bank e fintech no Brasil.", url: `${BASE_URL}/pulso`, inLanguage: "pt-BR" });
+  return layout("Pulso Concorde — relatório sintético diário de bank/fintech", "pulso", corpo, CSS_PULSO, "/pulso", "Um mini-relatório sintético por dia sobre temas quentes de bank e fintech: prioridades e objeções do consumidor, com falas ancoradas em dados públicos (IBGE, Bacen, ABEP).", jsonld);
 }
-
 function entryHtml(e: any): string {
   const corpo = `<main style="padding-top:52px"><div class="wrap">
 <p class="zsh"><b>concorde@painel</b> ~ % <i>painel --pulso ${esc(e.slug)}</i></p>
 <p style="margin-top:8px"><a href="/pulso">← todos os pulsos</a></p>
 ${cardEntry(e, false)}
-<p class="link-bloco" style="margin-top:24px">Quer rodar uma pesquisa dessas com o SEU produto? <a href="/usar#pesquisa">→ veja como</a></p>
+<p class="link-bloco" style="margin-top:24px">Quer rodar um relatório desses com o SEU produto? <a href="/usar#pesquisa">→ veja como</a></p>
 </div></main>`;
   const jsonld = JSON.stringify({ "@context": "https://schema.org", "@type": "Article", headline: e.titulo, datePublished: e.data, inLanguage: "pt-BR", author: { "@type": "Person", name: "Caio Sartoratto Prado" }, publisher: { "@type": "Organization", name: "Painel Sintético Concorde" }, url: `${BASE_URL}/pulso/${e.slug}`, about: e.tema });
-  return layout(`${e.titulo} — Pulso Concorde`, "pulso", corpo, CSS_PULSO, `/pulso/${e.slug}`, String(e.leitura || e.pergunta).slice(0, 180), jsonld);
+  return layout(`${e.titulo} — Pulso Concorde`, "pulso", corpo, CSS_PULSO, `/pulso/${e.slug}`, String(e.sumario || e.leitura || e.tema).slice(0, 180), jsonld);
 }
-
-function adminHtml(token: string, drafts: any[], pub: any[]): string {
+function adminHtml(token: string, drafts: any[], pub: any[], erro: string | null, gerando: boolean): string {
   const t = esc(token);
   const draftForm = (e: any) => `<form method="POST" action="/admin/pulso/publicar?token=${t}">
-<p class="pulso-meta"><span class="pulso-tag">${esc(e.tema)}</span> · ${esc(e.data)} · n=${e.n} · validador: nota ${esc(String(e.validacao?.nota ?? "?"))}${e.validacao?.aprovado === false ? " · <b style=\"color:var(--ambar)\">reprovado</b>" : ""}</p>
-${e.validacao?.problemas?.length ? `<p class="dim">Ressalvas do validador: ${esc((e.validacao.problemas || []).join("; "))}</p>` : ""}
+<p class="pulso-meta"><span class="pulso-tag">${esc(e.tema)}</span> · ${esc(e.data)} · n=${e.n} · ${(e.blocos || []).length} perguntas · validador: nota ${esc(String(e.validacao?.nota ?? "?"))}${e.validacao?.aprovado === false ? ' · <b style="color:var(--ambar)">reprovado</b>' : ""}</p>
+${e.validacao?.problemas?.length ? `<p class="dim">Ressalvas: ${esc((e.validacao.problemas || []).join("; "))}</p>` : ""}
 <input type="hidden" name="slug" value="${esc(e.slug)}">
-<label>Título<input name="titulo" value="${esc(e.titulo)}"></label>
-<label>Corpo (HTML)<textarea name="corpo" rows="6">${esc(e.corpo)}</textarea></label>
-<label>Leitura<input name="leitura" value="${esc(e.leitura)}"></label>
-${barras(e.distribuicao || [])}
-${verbatimsHtml(e.verbatims || [])}
+<label>Título</label><input name="titulo" value="${esc(e.titulo)}">
+<label>Sumário executivo</label><textarea name="sumario" rows="3">${esc(e.sumario)}</textarea>
+${(e.blocos || []).map(chartHtml).join("")}
+<label>Leitura / recomendação</label><input name="leitura" value="${esc(e.leitura)}">
+${verbatimsHtml(e.verbatims)}
 <button class="acao" type="submit">Publicar</button>
-</form>`;
+</form>
+<form method="POST" action="/admin/pulso/apagar?token=${t}" style="border:0;padding:0;margin:-6px 0 20px"><input type="hidden" name="slug" value="${esc(e.slug)}"><button class="perigo" type="submit">descartar rascunho</button></form>`;
   const corpo = `<main style="padding-top:52px"><div class="wrap pulso-admin">
 <h1>Pulso — revisão</h1>
-<form method="POST" action="/admin/pulso/gerar?token=${t}"><button class="acao" type="submit">Gerar rascunho agora (Gemini)</button></form>
+${gerando ? '<p class="dim" style="color:var(--verde)">Gerando em background (~1 min com N=100). Atualize a página em instantes.</p>' : ""}
+${erro ? `<p class="dim" style="color:var(--ambar)">Último erro na geração: ${esc(erro)}</p>` : ""}
+<form method="POST" action="/admin/pulso/gerar?token=${t}"><button class="acao" type="submit">Gerar rascunho agora (Gemini · ~1 min)</button></form>
 <h2>Rascunhos (${drafts.length})</h2>
 ${drafts.length ? drafts.map(draftForm).join("") : '<p class="dim">Nenhum rascunho. Clique acima para gerar ou espere o cron da madrugada.</p>'}
 <h2>Publicados (${pub.length})</h2>
-${pub.map((e) => `<p>· <a href="/pulso/${esc(e.slug)}">${esc(e.titulo)}</a> <span class="dim">(${esc(e.data)})</span></p>`).join("") || '<p class="dim">Nenhum ainda.</p>'}
+${pub.map((e) => `<p>· <a href="/pulso/${esc(e.slug)}">${esc(e.titulo)}</a> <span class="dim">(${esc(e.data)})</span> — <a href="/admin/pulso/apagar-pub?token=${t}&slug=${esc(e.slug)}">apagar</a></p>`).join("") || '<p class="dim">Nenhum ainda.</p>'}
 </div></main>`;
   return layout("Pulso — admin", "pulso", corpo, CSS_PULSO, "/pulso", "admin", "", '<meta name="robots" content="noindex, nofollow">');
 }
 
 // ---------- Rota ----------
-export async function rotaPulso(request: Request, env: any, pathname: string): Promise<Response | null> {
+export async function rotaPulso(request: Request, env: any, pathname: string, ctx: any): Promise<Response | null> {
   const html = (s: string, extra: Record<string, string> = {}) => new Response(s, { headers: { "Content-Type": "text/html; charset=utf-8", ...extra } });
   const doo = () => env.PULSO.get(env.PULSO.idFromName("global")) as any;
 
-  if (request.method === "GET" && pathname === "/pulso") {
-    const entries = await doo().listar("publicado");
-    return html(feedHtml(entries), { "Cache-Control": "public, max-age=300" });
-  }
+  if (request.method === "GET" && pathname === "/pulso") return html(feedHtml(await doo().listar("publicado")), { "Cache-Control": "public, max-age=300" });
   if (request.method === "GET" && pathname.startsWith("/pulso/")) {
-    const slug = decodeURIComponent(pathname.slice("/pulso/".length));
-    const e = await doo().obter(slug);
+    const e = await doo().obter(decodeURIComponent(pathname.slice("/pulso/".length)));
     if (!e || e.status !== "publicado") return html(feedHtml(await doo().listar("publicado")), { "Cache-Control": "no-store" });
     return html(entryHtml(e), { "Cache-Control": "public, max-age=300" });
   }
 
-  // Admin (protegido por ADMIN_TOKEN)
   if (pathname === "/admin/pulso" || pathname.startsWith("/admin/pulso/")) {
     const url = new URL(request.url);
     const token = url.searchParams.get("token") ?? "";
     if (!env.ADMIN_TOKEN || token !== env.ADMIN_TOKEN) return new Response("negado", { status: 403 });
-    if (request.method === "GET" && pathname === "/admin/pulso") {
-      return html(adminHtml(token, await doo().listar("rascunho"), await doo().listar("publicado")), { "Cache-Control": "no-store" });
-    }
+    const back = () => Response.redirect(`${BASE_URL}/admin/pulso?token=${encodeURIComponent(token)}`, 303);
+    if (request.method === "GET" && pathname === "/admin/pulso")
+      return html(adminHtml(token, await doo().listar("rascunho"), await doo().listar("publicado"), await doo().pegarErro(), url.searchParams.get("gerando") === "1"), { "Cache-Control": "no-store" });
     if (request.method === "POST" && pathname === "/admin/pulso/gerar") {
+      if (!env.GEMINI_API_KEY) return new Response("GEMINI_API_KEY não configurada.", { status: 500 });
       try { await gerarPulsoDoDia(env); } catch (e: any) { return new Response("Erro ao gerar: " + e.message, { status: 500 }); }
-      return Response.redirect(`${BASE_URL}/admin/pulso?token=${encodeURIComponent(token)}`, 303);
+      return back();
     }
     if (request.method === "POST" && pathname === "/admin/pulso/publicar") {
       const f = await request.formData();
-      await doo().publicar(String(f.get("slug") ?? ""), { titulo: String(f.get("titulo") ?? ""), corpo: String(f.get("corpo") ?? ""), leitura: String(f.get("leitura") ?? "") });
-      return Response.redirect(`${BASE_URL}/admin/pulso?token=${encodeURIComponent(token)}`, 303);
+      await doo().publicar(String(f.get("slug") ?? ""), { titulo: String(f.get("titulo") ?? ""), sumario: String(f.get("sumario") ?? ""), leitura: String(f.get("leitura") ?? "") });
+      return back();
     }
+    if (request.method === "POST" && pathname === "/admin/pulso/apagar") { await doo().apagar(String((await request.formData()).get("slug") ?? "")); return back(); }
+    if (request.method === "GET" && pathname === "/admin/pulso/apagar-pub") { await doo().apagar(url.searchParams.get("slug") ?? ""); return back(); }
+    if (request.method === "POST" && pathname === "/admin/pulso/limpar") { await doo().limparTudo(); return back(); }
   }
   return null;
 }
