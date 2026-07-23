@@ -14,6 +14,8 @@ const MODELO_REDATOR = "gemini-3.1-pro-preview";
 const MODELO_VALIDADOR = "gemini-3.1-pro-preview";
 const N_AMOSTRA = 40; // free tier: limite de 50 subrequests/invocação. Workers Paid → suba p/ 100.
 const LOTE = 12; // concorrência do fan-out
+const TEMP_FANOUT = 1.0; // fan-out com temperatura (personas amostram da própria incerteza — evita
+// distribuições determinísticas artificiais tipo 50/50 ou 98/0). Redator/validador ficam em temp 0.
 const BASE_URL = "https://painel.concorde-painel.workers.dev";
 
 type Pergunta = { id: string; texto: string; opcoes: string[] };
@@ -58,12 +60,12 @@ const ROTACAO: Tema[] = [
 
 // ---------- Gemini ----------
 const S = (props: any, req: string[]) => ({ type: "OBJECT", properties: props, required: req });
-async function gemini(model: string, system: string, prompt: string, apiKey: string, schema?: any): Promise<any> {
+async function gemini(model: string, system: string, prompt: string, apiKey: string, schema?: any, temperatura = 0): Promise<any> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
   const body = {
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0, responseMimeType: "application/json", ...(schema ? { responseSchema: schema } : {}) },
+    generationConfig: { temperature: temperatura, responseMimeType: "application/json", ...(schema ? { responseSchema: schema } : {}) },
   };
   const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`Gemini ${model} ${r.status}: ${(await r.text()).slice(0, 160)}`);
@@ -90,22 +92,27 @@ async function emLotes<T, R>(items: T[], tam: number, fn: (x: T) => Promise<R>):
 
 // ---------- Pipeline ----------
 async function fanOut(tema: Tema, amostraP: Persona[], apiKey: string) {
-  const sys = "Você RESPONDE como a persona descrita, em 1ª pessoa, fiel aos atributos e ancorado no Grounding (fatos com fonte). Não invente atributos. Se se_investe='Não', não fale como investidora. Para CADA pergunta escolha UMA opção EXATA da lista dela. Dê também 1 verbatim curto (sua fala mais marcante sobre o tema) e a fonte no Grounding. Responda só JSON.";
+  const sys = "Você RESPONDE como a persona descrita, em 1ª pessoa, fiel aos atributos e ancorado no Grounding. Não invente atributos. Se se_investe='Não', não fale como investidora. Para CADA pergunta, dê uma nota de 0 a 10 para CADA opção (quanto aquilo pesa/te representa) — use a escala inteira e seja fiel à SUA realidade (umas altas, outras baixas; nem tudo é 0 ou 10). Dê também 1 verbatim curto (sua fala mais marcante sobre o tema) e a fonte no Grounding. Responda só JSON.";
+  const notaSchema = (opts: string[]) => S(Object.fromEntries(opts.map((o) => [o, { type: "NUMBER" }])), opts);
   const schema = S({
-    respostas: S(Object.fromEntries(tema.perguntas.map((q) => [q.id, { type: "STRING" }])), tema.perguntas.map((q) => q.id)),
+    respostas: S(Object.fromEntries(tema.perguntas.map((q) => [q.id, notaSchema(q.opcoes)])), tema.perguntas.map((q) => q.id)),
     verbatim: { type: "STRING" }, fonte: { type: "STRING" },
   }, ["respostas", "verbatim"]);
-  const perguntasTxt = tema.perguntas.map((q) => `[${q.id}] ${q.texto} Opções: ${JSON.stringify(q.opcoes)}`).join("\n");
+  const perguntasTxt = tema.perguntas.map((q) => `[${q.id}] ${q.texto}\n   Nota 0-10 para cada: ${JSON.stringify(q.opcoes)}`).join("\n");
   const res = await emLotes(amostraP, LOTE, async (p) => {
-    const prompt = `Atributos: ${JSON.stringify(mini(p))}\nGrounding:\n${(p.grounding ?? "").slice(0, 2200)}\n\nTema: ${tema.tema}\nResponda cada pergunta escolhendo UMA opção exata da lista dela:\n${perguntasTxt}\n\nJSON: {"respostas": {${tema.perguntas.map((q) => `"${q.id}": "<opção exata>"`).join(", ")}}, "verbatim": "1 frase em 1ª pessoa fiel à ficha", "fonte": "id ou estatística do Grounding"}`;
+    const prompt = `Atributos: ${JSON.stringify(mini(p))}\nGrounding:\n${(p.grounding ?? "").slice(0, 2200)}\n\nTema: ${tema.tema}\nPara cada pergunta, dê nota 0-10 para CADA opção:\n${perguntasTxt}\n\nJSON: {"respostas": {${tema.perguntas.map((q) => `"${q.id}": {${q.opcoes.map((o) => `"${o}": <0-10>`).join(", ")}}`).join(", ")}}, "verbatim": "1 frase em 1ª pessoa fiel à ficha", "fonte": "id ou estatística do Grounding"}`;
     let a: any = null;
-    try { a = await gemini(MODELO_FANOUT, sys, prompt, apiKey, schema); } catch { return null; }
-    const respostas: Record<string, string> = {};
+    try { a = await gemini(MODELO_FANOUT, sys, prompt, apiKey, schema, TEMP_FANOUT); } catch { return null; }
+    const respostas: Record<string, Record<string, number>> = {};
     for (const q of tema.perguntas) {
-      const val = q.opcoes.find((o) => o.toLowerCase() === String(a?.respostas?.[q.id] ?? "").toLowerCase());
-      if (val) respostas[q.id] = val;
+      const notas: Record<string, number> = {};
+      for (const o of q.opcoes) {
+        const v = Number(a?.respostas?.[q.id]?.[o]);
+        if (Number.isNaN(v)) return null;
+        notas[o] = Math.max(0, Math.min(10, v));
+      }
+      respostas[q.id] = notas;
     }
-    if (Object.keys(respostas).length < tema.perguntas.length) return null;
     return { id: p.id, respostas, verbatim: String(a.verbatim ?? "").slice(0, 320), fonte: String(a.fonte ?? "").slice(0, 160), perfil: `${p.idade}a, ${p.profissao}, ${p.classe_social} (${p.regiao})` };
   });
   return res.filter(Boolean) as any[];
@@ -114,9 +121,10 @@ async function fanOut(tema: Tema, amostraP: Persona[], apiKey: string) {
 function agregaTudo(respostas: any[], perguntas: Pergunta[]) {
   const n = respostas.length;
   return perguntas.map((q) => {
-    const cont: Record<string, number> = {}; q.opcoes.forEach((o) => (cont[o] = 0));
-    respostas.forEach((r) => { if (cont[r.respostas[q.id]] !== undefined) cont[r.respostas[q.id]]++; });
-    const dist = q.opcoes.map((o) => ({ opcao: o, n: cont[o], pct: n ? Math.round((cont[o] / n) * 100) : 0 })).sort((a, b) => b.n - a.n);
+    const dist = q.opcoes.map((o) => {
+      const soma = respostas.reduce((acc, r) => acc + (r.respostas[q.id]?.[o] ?? 0), 0);
+      return { opcao: o, media: n ? Math.round((soma / n) * 10) / 10 : 0 };
+    }).sort((a, b) => b.media - a.media);
     return { id: q.id, texto: q.texto, distribuicao: dist };
   });
 }
@@ -126,20 +134,20 @@ function pickVerbatims(respostas: any[], k: number) {
 }
 
 async function redator(tema: Tema, blocos: any[], verbatims: any[], n: number, apiKey: string) {
-  const sys = "Você é o redator do Pulso Concorde, especialista em mini-relatórios estilo consultoria (BCG/McKinsey) sobre o consumidor bancário brasileiro, ancorados em dados sintéticos. REGRAS INEGOCIÁVEIS: (1) o painel dá DIREÇÃO, não nível absoluto — NUNCA escreva 'X% dos brasileiros'; use 'na amostra' ou 'o painel projeta'; (2) honesto, sem hype nem promessa; (3) as análises comentam a DISTRIBUIÇÃO (a opção dominante e o que ela sugere) — NÃO cite falas/verbatims, NÃO invente pessoas nem perfis demográficos, NÃO escreva 'Fonte:' nem ids de fatos no texto (as falas dos consumidores aparecem em seção própria, à parte, com as fontes reais); (4) 2-4 frases por análise, sumário executivo denso, recomendação acionável. Responda só JSON.";
+  const sys = "Você é o redator do Pulso Concorde, especialista em mini-relatórios estilo consultoria (BCG/McKinsey) sobre o consumidor bancário brasileiro, ancorados em dados sintéticos. REGRAS INEGOCIÁVEIS: (1) o painel dá DIREÇÃO, não nível absoluto — NUNCA escreva 'X% dos brasileiros'; use 'na amostra' ou 'o painel projeta'; (2) honesto, sem hype nem promessa; (3) as análises comentam as NOTAS MÉDIAS 0-10 (a opção com maior nota e o gap para as demais) — NÃO cite falas/verbatims, NÃO invente pessoas nem perfis demográficos, NÃO escreva 'Fonte:' nem ids de fatos no texto (as falas dos consumidores aparecem em seção própria, à parte, com as fontes reais); (4) 2-4 frases por análise, sumário executivo denso, recomendação acionável. Responda só JSON.";
   const schema = S({
     titulo: { type: "STRING" }, sumario: { type: "STRING" },
     blocos: { type: "ARRAY", items: S({ id: { type: "STRING" }, analise: { type: "STRING" } }, ["id", "analise"]) },
     leitura: { type: "STRING" },
   }, ["titulo", "sumario", "blocos", "leitura"]);
-  const prompt = `Tema: ${tema.tema} — ${tema.descricao}\nAmostra sintética n=${n}\nPerguntas e distribuições: ${JSON.stringify(blocos.map((b) => ({ id: b.id, pergunta: b.texto, distribuicao: b.distribuicao })))}\n\nEscreva um mini-relatório JSON: {"titulo": "manchete do achado principal (sem % absoluto)", "sumario": "2-3 frases de sumário executivo conectando as perguntas", "blocos": [{"id":"<id da pergunta>", "analise":"2-4 frases interpretando a distribuição desta pergunta (a opção dominante e o que sugere), SEM citar falas, pessoas ou fontes"}], "leitura": "1 recomendação acionável para quem constrói produto bank/fintech"}`;
+  const prompt = `Tema: ${tema.tema} — ${tema.descricao}\nAmostra sintética n=${n} · escala de importância 0-10 por opção (média)\nPerguntas e notas médias por opção: ${JSON.stringify(blocos.map((b) => ({ id: b.id, pergunta: b.texto, notas_medias: b.distribuicao })))}\n\nEscreva um mini-relatório JSON: {"titulo": "manchete do achado principal (sem número absoluto)", "sumario": "2-3 frases de sumário executivo conectando as perguntas", "blocos": [{"id":"<id da pergunta>", "analise":"2-4 frases interpretando as notas médias desta pergunta (a opção com maior nota e o gap), SEM citar falas, pessoas ou fontes"}], "leitura": "1 recomendação acionável para quem constrói produto bank/fintech"}`;
   return await gemini(MODELO_REDATOR, sys, prompt, apiKey, schema);
 }
 
 async function validador(rep: any, blocos: any[], verbatims: any[], apiKey: string) {
   const sys = "Você é o editor-crítico rigoroso do Pulso Concorde e guardião da credibilidade. REPROVE se: inventou número ou usou número fora das distribuições; fez claim de nível absoluto ('X% dos brasileiros') sem enquadrar como direção/amostra; tom vendedor/hype; usou verbatim fora da lista; ou tratou alguma pergunta como se medisse estado vivido (satisfação, vitimização). Responda só JSON.";
   const schema = S({ aprovado: { type: "BOOLEAN" }, nota: { type: "NUMBER" }, problemas: { type: "ARRAY", items: { type: "STRING" } } }, ["aprovado"]);
-  const prompt = `Distribuições reais: ${JSON.stringify(blocos.map((b) => ({ id: b.id, distribuicao: b.distribuicao })))}\nVerbatims válidos: ${JSON.stringify(verbatims.map((v: any) => v.verbatim))}\nRelatório: ${JSON.stringify(rep)}\n\nResponda JSON: {"aprovado": true/false, "nota": 0-10, "problemas": ["..."]}`;
+  const prompt = `Notas médias reais (0-10 por opção): ${JSON.stringify(blocos.map((b) => ({ id: b.id, notas_medias: b.distribuicao })))}\nVerbatims válidos: ${JSON.stringify(verbatims.map((v: any) => v.verbatim))}\nRelatório: ${JSON.stringify(rep)}\n\nResponda JSON: {"aprovado": true/false, "nota": 0-10, "problemas": ["..."]}`;
   return await gemini(MODELO_VALIDADOR, sys, prompt, apiKey, schema);
 }
 
@@ -232,6 +240,7 @@ const CSS_PULSO = `<style>
 .pulso-titulo a{color:var(--texto)}
 .pulso-sumario{color:#d1d1d6;font-size:1.02em;border-left:3px solid var(--roxo);padding-left:14px;margin:14px 0 22px}
 .tc-q{font-size:1em;font-weight:600;margin:26px 0 12px;color:var(--texto)}
+.tc-escala{color:var(--dim);font-weight:400;font-size:.82em}
 .tc-chart{margin:6px 0 6px}
 .tc-row{display:grid;grid-template-columns:minmax(84px,32%) 1fr auto;align-items:center;gap:12px;margin:7px 0;font-size:.9em}
 .tc-cat{text-align:right;color:var(--dim);line-height:1.2}
@@ -252,8 +261,8 @@ const CSS_PULSO = `<style>
 </style>`;
 
 function chartHtml(b: any): string {
-  const rows = (b.distribuicao || []).map((d: any, i: number) => `<div class="tc-row ${i === 0 && d.pct > 0 ? "top" : ""}"><span class="tc-cat">${esc(d.opcao)}</span><div class="tc-track"><div class="tc-bar" style="width:${Math.max(2, d.pct)}%"></div></div><span class="tc-val">${d.pct}%</span></div>`).join("");
-  return `<h3 class="tc-q">${esc(b.texto)}</h3><div class="tc-chart">${rows}</div>${b.analise ? `<p class="tc-analise">${esc(b.analise)}</p>` : ""}`;
+  const rows = (b.distribuicao || []).map((d: any, i: number) => `<div class="tc-row ${i === 0 && d.media > 0 ? "top" : ""}"><span class="tc-cat">${esc(d.opcao)}</span><div class="tc-track"><div class="tc-bar" style="width:${Math.max(2, Math.round((d.media / 10) * 100))}%"></div></div><span class="tc-val">${Number(d.media).toFixed(1)}</span></div>`).join("");
+  return `<h3 class="tc-q">${esc(b.texto)} <span class="tc-escala">· nota média 0–10</span></h3><div class="tc-chart">${rows}</div>${b.analise ? `<p class="tc-analise">${esc(b.analise)}</p>` : ""}`;
 }
 function verbatimsHtml(vs: any[]): string {
   return (vs || []).slice(0, 6).map((v) => `<blockquote class="pulso-v">"${esc(v.verbatim)}"<cite>— ${esc(v.perfil)}${v.fonte ? ` · <span class="dim">fonte: ${esc(v.fonte)}</span>` : ""}</cite></blockquote>`).join("");
